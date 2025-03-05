@@ -112,7 +112,6 @@ def getx(img):
             mx = hand_lm.landmark[hands.HandLandmark.MIDDLE_FINGER_TIP].x * w
             wx = hand_lm.landmark[hands.HandLandmark.WRIST].x * w
     return wx, mx
-'''
 #%%
 hands = mp.solutions.hands
 Hands = hands.Hands()
@@ -120,6 +119,8 @@ offset_percent = 5  # offset percentage for croping the detected hand
 rotation_percent = 20  # offset percentage for hand straightening
 count = 0  # count of images which has been processed
 suc = 0  # count of images wihcn successfully found a hand in it
+'''
+
 #%% md
 ### Preprocess Validation and Test
 #%%
@@ -145,8 +146,9 @@ for filename in os.listdir(image_dir_val): #val
         # img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_AREA)
 
         img = img.astype(np.float32) / 255.0  # Normalize
+        img = (img * 255).astype(np.uint8)
 
-        cv2.imwrite(os.path.join(output_dir_test, filename), img)  # Save the processed image
+        cv2.imwrite(os.path.join(output_dir_val, filename), img)  # Save the processed image
         print(f"img {filename} processed")
 #%%
 for filename in os.listdir(image_dir_test): #test
@@ -161,6 +163,7 @@ for filename in os.listdir(image_dir_test): #test
         # img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_AREA)
 
         img = img.astype(np.float32) / 255.0  # Normalize
+        img = (img * 255).astype(np.uint8)
 
         cv2.imwrite(os.path.join(output_dir_test, filename), img)  # Save the processed image
         print(f"img {filename} processed")
@@ -173,21 +176,26 @@ output_dir_train = 'Train/pp_train_samples' # new
 
 os.makedirs(output_dir_train, exist_ok=True)
 #%%
-for filename in os.listdir(image_dir_train): #val
-    img = cv2.imread(os.path.join(image_dir_train, filename))
+for filename in os.listdir(image_dir_train):
+    img_path = os.path.join(image_dir_train, filename)
+    img = cv2.imread(img_path)
+
     if img is None:
-        print("ERROR:", filename)
-    else:
-        img = flipAndRotate(img)   # rotate before recognition/cropping, the order of the rest of the pipeline is indifferent
+        print("ERROR loading:", filename)
+        continue
 
-        # img = handRec(img)
-        # img = clahe3(img)
+    img = flipAndRotate(img)  # rotate before recognition/cropping
 
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # img = handRec(img)
+    # img = clahe3(img)
 
-        # img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_AREA)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)  # grayscale
 
-        img = img.astype(np.float32) / 255.0  # Normalize
+    # img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_AREA)
 
-        cv2.imwrite(os.path.join(output_dir_test, filename), img)  # Save the processed image
-        print(f"img {filename} processed")
+    img = img.astype(np.float32) / 255.0  # Normalize
+    img = (img * 255).astype(np.uint8)
+
+    output_path = os.path.join(output_dir_train, filename)
+    cv2.imwrite(output_path, img)
+    print(f"img {filename} processed")
