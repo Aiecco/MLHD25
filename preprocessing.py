@@ -13,7 +13,7 @@ val_labels.rename(columns={"Image ID": "id", "Bone Age (months)": "boneage"}, in
 test_labels.rename(columns={"Case ID": "id", "Sex": "male", "Ground truth bone age (months)": "boneage"}, inplace=True)
 
 # convert male column to boolean
-test_labels["male"] = test_labels["male"].map({"M": True, "F": False})
+test_labels["male"] = test_labels["male"].replace({"M": True, "F": False})
 
 col_order = ["id", "boneage", "male"]
 train_labels = train_labels[col_order]
