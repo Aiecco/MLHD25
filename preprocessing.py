@@ -199,3 +199,54 @@ for filename in os.listdir(image_dir_train):
     output_path = os.path.join(output_dir_train, filename)
     cv2.imwrite(output_path, img)
     print(f"img {filename} processed")
+
+
+# --------------------------- LOADING
+# paths
+
+base_path = ""
+
+train_images_path = os.path.join(base_path, "Train/pp_train_samples")
+val_images_path = os.path.join(base_path, "Val/pp_val_samples")
+test_images_path = os.path.join(base_path, "Test/pp_test_samples")
+
+train_labels = pd.read_csv(os.path.join(base_path, "Train/train_labels.csv"))
+val_labels = pd.read_csv(os.path.join(base_path, "Val/val_labels.csv"))
+test_labels = pd.read_csv(os.path.join(base_path, "Test/test_labels.csv"))
+
+
+# loading
+target_size = (224, 224)
+
+def load(image_folder, labels):
+    X, y = [], []
+    for _, row in labels.iterrows():
+        image_id = row["id"]
+        img_path = os.path.join(image_folder, f"{image_id}.png")
+
+        if not os.path.exists(img_path):
+            continue
+
+        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)  # grayscale images
+        print(f"loading {img_path}")
+
+        img = cv2.resize(img, target_size)
+        img = np.expand_dims(img, axis=-1)  # add channel dimension
+        X.append(img)
+        y.append(row["boneage"])  # response
+
+    return np.array(X), np.array(y)
+
+
+X_train, y_train = load(train_images_path, train_labels)
+X_val, y_val = load(val_images_path, val_labels)
+X_test, y_test = load(test_images_path, test_labels)
+
+
+# saving
+np.save("X_train.npy", X_train)
+np.save("y_train.npy", y_train)
+np.save("X_val.npy", X_val)
+np.save("y_val.npy", y_val)
+np.save("X_test.npy", X_test)
+np.save("y_test.npy", y_test)
