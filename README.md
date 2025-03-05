@@ -1,4 +1,3 @@
 # MLHD25
 Bone Age Prediction from Hand X-Rays
-
-![image](https://github.com/user-attachments/assets/f0e38817-db92-41b3-953f-0b9c5a889c1a)
+![immagine](https://github.com/user-attachments/assets/04e56de7-d400-43f9-aa93-0027a9faabb9)
