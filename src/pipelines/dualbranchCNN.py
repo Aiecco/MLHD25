@@ -1,31 +1,53 @@
 import os
-import torch
-from src.Models.DualBranchCNN import DualBranchCNN
-from src.preprocessing.preprocess import preprocess
 
-def pipeline_dualbranchCNN():
+from src.Models.DualBranchCNN import DualBranchCNN
+from src.Utils.save_tensors import save_tensors
+from src.preprocessing.preprocess import preprocess_dataset
+from src.preprocessing.preprocess_images import plot_tensor_image
+
+
+def pipeline_dualbranchCNN(preprocess=False):
 
     # Per le cartelle in data/
-    test_path = '../../data/Test/'
-    train_path = '../../data/Train/'
-    val_path = '../../data/Val/'
+    test_path = 'data/Test/test_samples'
+    train_path = 'data/Train/train_samples'
+    val_path = 'data/Val/validation_samples'
 
-    for test_image, train_image, val_image in zip(test_path, train_path, val_path):
-        test_images = preprocess(test_image)
-        train_images = preprocess(train_image)
-        val_images = preprocess(val_image)
+    test_tensors = []
+    train_tensors = []
+    val_tensors = []
+
+    if preprocess:
+        # Processa la cartella di test
+        print('Preprocessing dataset:\nTest set')
+        for filename in os.listdir(test_path):
+            if filename.lower().endswith(('.png', '.jpg', '.jpeg')):  # Filtra i file immagine
+                image_path = os.path.join(test_path, filename)
+                test_tensors.append(preprocess_dataset(image_path))
+        if test_tensors is not None:
+            # Esempio: plotta il primo tensore (se presente)
+            plot_tensor_image(test_tensors[0])
+            save_tensors(os.path.join(test_path, '../tensors'), test_tensors)
+
+        # Processa la cartella di training
+        print('Training set')
+        for filename in os.listdir(train_path):
+            if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                image_path = os.path.join(train_path, filename)
+                train_tensors.append(preprocess_dataset(image_path))
+        if train_tensors is not None:
+            plot_tensor_image(train_tensors[0])
+            save_tensors(os.path.join(test_path, '../tensors'), train_tensors)
+
+        print('Validation set')
+        # Processa la cartella di validazione
+        for filename in os.listdir(val_path):
+            if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                image_path = os.path.join(train_path, filename)
+                val_tensors.append(preprocess_dataset(image_path))
+
+        if val_tensors is not None:
+            plot_tensor_image(val_tensors[0])
+            save_tensors(os.path.join(val_path, '../tensors'), val_tensors)
 
 
-
-    # Parametri di esempio
-    batch_size = 8
-    img_size = (128, 128)
-    input_channels = 1
-    gender_dim = 2  # per esempio, se usi one-hot per 2 generi
-
-    # Inizializzazione del modello
-    model = DualBranchCNN(input_channels=input_channels, img_size=img_size, gender_dim=gender_dim)
-
-    # Forward pass
-    age_pred = model(pooled_images, heatmaps, gender_data)
-    print("Predicted ages:", age_pred.shape)
