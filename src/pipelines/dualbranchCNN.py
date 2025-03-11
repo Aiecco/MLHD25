@@ -1,53 +1,54 @@
 import os
 
 from src.Models.DualBranchCNN import DualBranchCNN
+from src.Utils.filelabels_search import filelabels_search
 from src.Utils.save_tensors import save_tensors
 from src.preprocessing.preprocess import preprocess_dataset
 from src.preprocessing.preprocess_images import plot_tensor_image
 
 
-def pipeline_dualbranchCNN(preprocess=False):
+def process_folder(folder_path, tensors_dict, filepath):
+    print(f'Preprocessing dataset:\n{os.path.basename(folder_path)} set')
+    for filename in os.listdir(folder_path):
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            id_img = int(filename.split('.')[0])
+            image_path = os.path.join(folder_path, filename)
+            tensors_dict[id_img] = {} #creo un dizionario per ogni id_img
+            tensors_dict[id_img]['tensor'] = preprocess_dataset(image_path)
+            #tensors_dict[id_img]['sex'], tensors_dict[id_img]['boneage'] = filelabels_search(
+            #    os.path.join(folder_path, f'../{filepath}'), id_img)
 
-    # Per le cartelle in data/
+    return tensors_dict
+
+def pipeline_dualbranchCNN(preprocess=False):
+    # Percorsi delle cartelle
     test_path = 'data/Test/test_samples'
     train_path = 'data/Train/train_samples'
     val_path = 'data/Val/validation_samples'
 
-    test_tensors = []
-    train_tensors = []
-    val_tensors = []
-
     if preprocess:
-        # Processa la cartella di test
-        print('Preprocessing dataset:\nTest set')
-        for filename in os.listdir(test_path):
-            if filename.lower().endswith(('.png', '.jpg', '.jpeg')):  # Filtra i file immagine
-                image_path = os.path.join(test_path, filename)
-                test_tensors.append(preprocess_dataset(image_path))
-        if test_tensors is not None:
-            # Esempio: plotta il primo tensore (se presente)
-            plot_tensor_image(test_tensors[0])
-            save_tensors(os.path.join(test_path, '../tensors'), test_tensors)
+        test_tensors = process_folder(test_path, {}, 'test_labels.csv')
+        train_tensors = process_folder(train_path, {}, 'train_labels.csv')
+        val_tensors = process_folder(val_path, {}, 'val_labels.csv')
 
-        # Processa la cartella di training
-        print('Training set')
-        for filename in os.listdir(train_path):
-            if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                image_path = os.path.join(train_path, filename)
-                train_tensors.append(preprocess_dataset(image_path))
-        if train_tensors is not None:
-            plot_tensor_image(train_tensors[0])
-            save_tensors(os.path.join(test_path, '../tensors'), train_tensors)
-
-        print('Validation set')
-        # Processa la cartella di validazione
-        for filename in os.listdir(val_path):
-            if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                image_path = os.path.join(train_path, filename)
-                val_tensors.append(preprocess_dataset(image_path))
-
-        if val_tensors is not None:
-            plot_tensor_image(val_tensors[0])
-            save_tensors(os.path.join(val_path, '../tensors'), val_tensors)
+        # Plot e save per test
+        if test_tensors:
+            for id_img, data in test_tensors.items():
+                if data['tensor'] is not None:
+                    #plot_tensor_image(data['tensor'])
+                    save_tensors(os.path.join(os.path.dirname(test_path), 'tensors'), id_img, data)
 
 
+        # Plot e save per train
+        if train_tensors:
+            for id_img, data in train_tensors.items():
+                if data['tensor'] is not None:
+                    #plot_tensor_image(data['tensor'])
+                    save_tensors(os.path.join(os.path.dirname(train_path), 'tensors'), id_img, data)
+
+        # Plot e save per validation
+        if val_tensors:
+            for id_img, data in val_tensors.items():
+                if data['tensor'] is not None:
+                    #plot_tensor_image(data['tensor'])
+                    save_tensors(os.path.join(os.path.dirname(val_path), 'tensors'), id_img, data)
