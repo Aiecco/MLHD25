@@ -1,9 +1,7 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+import tensorflow as tf
+from tensorflow.keras import layers
 
-
-class DualBranchCNN(nn.Module):
+class DualBranchCNN(tf.keras.Model):
     def __init__(self, input_channels=1, img_size=(128, 128), gender_dim=0):
         """
         input_channels: Numero di canali dell'immagine (es. 1 per radiografie in scala di grigi)
@@ -13,61 +11,58 @@ class DualBranchCNN(nn.Module):
         super(DualBranchCNN, self).__init__()
 
         # --- Branch 1: Immagini Pooled ---
-        self.branch1 = nn.Sequential(
-            nn.Conv2d(input_channels, 16, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.MaxPool2d(2),  # dimezza le dimensioni
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(2)
-        )
+        self.branch1 = tf.keras.Sequential([
+            layers.Conv2D(16, kernel_size=3, strides=1, padding='same', input_shape=(img_size[0], img_size[1], input_channels)),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+            layers.MaxPool2D(2),
+            layers.Conv2D(32, kernel_size=3, strides=1, padding='same'),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+            layers.MaxPool2D(2)
+        ])
 
         # --- Branch 2: Heatmaps ---
-        self.branch2 = nn.Sequential(
-            nn.Conv2d(input_channels, 16, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(2)
-        )
+        self.branch2 = tf.keras.Sequential([
+            layers.Conv2D(16, kernel_size=3, strides=1, padding='same', input_shape=(img_size[0], img_size[1], input_channels)),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+            layers.MaxPool2D(2),
+            layers.Conv2D(32, kernel_size=3, strides=1, padding='same'),
+            layers.BatchNormalization(),
+            layers.ReLU(),
+            layers.MaxPool2D(2)
+        ])
 
         # Calcolo dimensione feature dopo convoluzioni e pooling
-        # Supponiamo che l'immagine abbia dimensione (H, W) e venga dimezzata 2 volte
         pooled_H, pooled_W = img_size[0] // 4, img_size[1] // 4
         branch_feat_dim = 32 * pooled_H * pooled_W
 
         # Layer fully-connected per la fusione delle due branche (e il genere, se fornito)
-        total_feat_dim = branch_feat_dim * 2 + gender_dim  # somma delle due branche e, eventualmente, le feature del genere
+        total_feat_dim = branch_feat_dim * 2 + gender_dim
 
-        self.fc = nn.Sequential(
-            nn.Linear(total_feat_dim, 128),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(128, 1)  # Output: regressione per l'età
-        )
+        self.fc = tf.keras.Sequential([
+            layers.Dense(128, activation='relu', input_shape=(total_feat_dim,)),
+            layers.Dropout(0.5),
+            layers.Dense(1)
+        ])
 
-    def forward(self, pooled_input, heatmap_input, gender_input=None):
+    def call(self, pooled_input, heatmap_input, gender_input=None):
         # Elaborazione Branch 1
         x1 = self.branch1(pooled_input)
-        x1 = x1.view(x1.size(0), -1)
+        x1 = tf.reshape(x1, [tf.shape(x1)[0], -1])
 
         # Elaborazione Branch 2
         x2 = self.branch2(heatmap_input)
-        x2 = x2.view(x2.size(0), -1)
+        x2 = tf.reshape(x2, [tf.shape(x2)[0], -1])
 
         # Concatenazione delle feature
         if gender_input is not None:
-            # Se il genere è fornito, deve avere la forma [batch_size, gender_dim]
-            x = torch.cat([x1, x2, gender_input], dim=1)
+            gender_input = tf.expand_dims(gender_input, axis=1)
+            x = tf.concat([x1, x2, gender_input], axis=1)
         else:
-            x = torch.cat([x1, x2], dim=1)
+            x = tf.concat([x1, x2], axis=1)
 
         # Passaggio attraverso la rete fully-connected
         age_output = self.fc(x)
         return age_output
-
