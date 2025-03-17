@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from src.Utils.filelabels_search import filelabels_search
+from src.Utils.load_tensors import load_tensor
+from src.preprocessing.preprocess import preprocess_dataset
 from src.preprocessing.preprocess_images import preprocess_pooled_and_heatmap
 from src.Models.DualBranchCNN import DualBranchCNN
 
@@ -30,29 +32,26 @@ def train_model(model, train_files_path='data/Train/tensors', val_files_path='da
     """
 
     # Carica i dati di training
-    train_files = [f for f in os.listdir(train_files_path) if f.endswith('.pt')]
+    train_files = [f for f in os.listdir(train_files_path) if f.endswith('.data-00000-of-00001')] #cambiato l'estensione
     train_data = {"pooled": [], "heatmap": [], "gender": [], "age": []}
     labels_path = os.path.join(train_files_path, "..", "train_labels.csv")
     heatmaps_path = os.path.join(train_files_path, "..", "heatmaps")
     for file in train_files:
-        file_path = os.path.join(train_files_path, file)
+        file_prefix = os.path.join(train_files_path, file.split(".data")[0]) #creo il prefisso corretto
         try:
-            id_img = int(os.path.splitext(file)[0])
+            id_img = int(file.split("_")[1].split(".data")[0]) #estraggo l'id_img
         except ValueError:
             print(f"Nome file non valido, saltato: {file}")
             continue
-        pooled_tensor = tf.convert_to_tensor(np.load(file_path), dtype=tf.float32)
-        heatmap_file = f"{id_img}.pt"
-        heatmap_tensor_path = os.path.join(heatmaps_path, heatmap_file)
-        if not os.path.exists(heatmap_tensor_path):
-            print(f"Heatmap non trovata per l'immagine {id_img}, saltata.")
-            continue
-        heatmap_tensor = tf.convert_to_tensor(np.load(heatmap_tensor_path), dtype=tf.float32)
+        pooled_tensor = load_tensor(file_prefix.replace("heatmaps", "tensors"), "tensor/.ATTRIBUTES/VARIABLE_VALUE")
+        heatmap_tensor = load_tensor(file_prefix, "heated/.ATTRIBUTES/VARIABLE_VALUE")
+
         gender, age = filelabels_search(labels_path, id_img)
         train_data["pooled"].append(pooled_tensor)
         train_data["heatmap"].append(heatmap_tensor)
         train_data["gender"].append(gender)
         train_data["age"].append(age)
+
     gender_mapping = {"M": 1, "F": 0}
     train_data["gender"] = [gender_mapping[g] if isinstance(g, str) else g for g in train_data["gender"]]
     train_pooled_tensors = tf.stack(train_data["pooled"])
@@ -64,24 +63,20 @@ def train_model(model, train_files_path='data/Train/tensors', val_files_path='da
     train_dataset = train_dataset.shuffle(buffer_size=len(train_files)).batch(batch_size)
 
     # Carica i dati di validation
-    val_files = [f for f in os.listdir(val_files_path) if f.endswith('.pt')]
+    val_files = [f for f in os.listdir(val_files_path) if f.endswith('.data-00000-of-00001')] #cambiato l'estensione
     val_data = {"pooled": [], "heatmap": [], "gender": [], "age": []}
     val_labels_path = os.path.join(val_files_path, "..", "train_labels.csv")
     val_heatmaps_path = os.path.join(val_files_path, "..", "heatmaps")
     for file in val_files:
-        file_path = os.path.join(val_files_path, file)
+        file_prefix = os.path.join(val_files_path, file.split(".data")[0])
         try:
-            id_img = int(os.path.splitext(file)[0])
+            id_img = int(file.split("_")[1].split(".data")[0])
         except ValueError:
             print(f"Nome file non valido, saltato: {file}")
             continue
-        pooled_tensor = tf.convert_to_tensor(np.load(file_path), dtype=tf.float32)
-        heatmap_file = f"{id_img}.pt"
-        heatmap_tensor_path = os.path.join(val_heatmaps_path, heatmap_file)
-        if not os.path.exists(heatmap_tensor_path):
-            print(f"Heatmap non trovata per l'immagine {id_img}, saltata.")
-            continue
-        heatmap_tensor = tf.convert_to_tensor(np.load(heatmap_tensor_path), dtype=tf.float32)
+        pooled_tensor = load_tensor(file_prefix.replace("heatmaps", "tensors"))
+        heatmap_tensor = load_tensor(file_prefix)
+
         gender, age = filelabels_search(val_labels_path, id_img)
         val_data["pooled"].append(pooled_tensor)
         val_data["heatmap"].append(heatmap_tensor)

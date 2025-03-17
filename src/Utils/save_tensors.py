@@ -1,6 +1,7 @@
 import os
 import tensorflow as tf
 
+
 def save_tensors(image_path, heated_path, id_img, data):
     if data is None:
         return
