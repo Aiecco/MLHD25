@@ -12,26 +12,30 @@ class DualBranchCNN(tf.keras.Model):
 
         # --- Branch 1: Immagini Pooled ---
         self.branch1 = tf.keras.Sequential([
-            layers.Conv2D(16, kernel_size=3, strides=1, padding='same', input_shape=(img_size[0], img_size[1], input_channels)),
+            layers.Conv2D(32, kernel_size=3, strides=1, padding='same', activation='relu',
+                          input_shape=(img_size[0], img_size[1], input_channels)),
             layers.BatchNormalization(),
-            layers.ReLU(),
-            layers.MaxPool2D(2),
-            layers.Conv2D(32, kernel_size=3, strides=1, padding='same'),
+            layers.AveragePooling2D(2),
+            layers.Conv2D(64, kernel_size=3, strides=1, padding='same', activation='relu'),
             layers.BatchNormalization(),
-            layers.ReLU(),
-            layers.MaxPool2D(2)
+            layers.AveragePooling2D(2),
+            layers.Conv2D(128, kernel_size=3, strides=1, padding='same', activation='relu'),
+            layers.BatchNormalization(),
+            layers.AveragePooling2D(2),
         ])
 
         # --- Branch 2: Heatmaps ---
         self.branch2 = tf.keras.Sequential([
-            layers.Conv2D(16, kernel_size=3, strides=1, padding='same', input_shape=(img_size[0], img_size[1], input_channels)),
+            layers.Conv2D(32, kernel_size=3, strides=1, padding='same', activation='relu',
+                          input_shape=(img_size[0], img_size[1], input_channels)),
             layers.BatchNormalization(),
-            layers.ReLU(),
             layers.MaxPool2D(2),
-            layers.Conv2D(32, kernel_size=3, strides=1, padding='same'),
+            layers.Conv2D(64, kernel_size=3, strides=1, padding='same', activation='relu'),
             layers.BatchNormalization(),
-            layers.ReLU(),
-            layers.MaxPool2D(2)
+            layers.MaxPool2D(2),
+            layers.Conv2D(128, kernel_size=3, strides=1, padding='same', activation='relu'),
+            layers.BatchNormalization(),
+            layers.MaxPool2D(2),
         ])
 
         # Calcolo dimensione feature dopo convoluzioni e pooling
@@ -42,8 +46,10 @@ class DualBranchCNN(tf.keras.Model):
         total_feat_dim = branch_feat_dim * 2 + gender_dim
 
         self.fc = tf.keras.Sequential([
-            layers.Dense(128, activation='relu', input_shape=(total_feat_dim,)),
-            layers.Dropout(0.5),
+            layers.Dense(256, activation='relu', input_shape=(total_feat_dim,)),
+            layers.Dropout(0.4),
+            layers.Dense(128, activation='relu'),
+            layers.Dropout(0.3),
             layers.Dense(1)
         ])
         self.input_channels = input_channels
