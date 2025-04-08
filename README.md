@@ -5,6 +5,16 @@ Bone Age Prediction from Hand X-Rays
 
 
 
+
+
+
+
+Current models:
+
+- Basic benchmark semi-shallow CNN: 22.5 months test error [no training problems]
+- Deep CNN with gender fusion mech [to be trained]
+
+
 Ideas:
         
     1. Multi-Input CNN
