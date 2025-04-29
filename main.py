@@ -13,7 +13,7 @@ def main():
     #val_labels(val_path)
 
     # First idea:
-    pipeline_dualbranchCNN(preprocess=False, training=True, epochs=20)
+    pipeline_dualbranchCNN(preprocess=False, training=False, epochs=10)
 
 
 if __name__ == '__main__':

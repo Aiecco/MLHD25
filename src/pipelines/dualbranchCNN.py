@@ -61,22 +61,26 @@ def pipeline_dualbranchCNN(preprocess=False, training=False, epochs=10):
                                   os.path.join(os.path.dirname(val_path), 'heatmaps'), id_img, data)
 
     # Inizializza il modello
-    model = DualBranchCNN(input_channels=1, img_size=(128, 128), gender_dim=2)
+    model = DualBranchCNN(input_channels=1, img_size=(128, 128))
 
     # Avvia il training
     if training:
-        epoch_train_losses, epoch_val_losses = train_model(model, num_epochs=epochs, batch_size=32, learning_rate=1e-3)
-        plot_training_progress(epoch_train_losses, epoch_val_losses)
+        training_history = train_model(model, num_epochs=epochs, batch_size=32, learning_rate=1e-3)
+        #plot_training_progress(epoch_train_losses, epoch_val_losses)
 
     # test model
     # Carica il modello addestrato
-    model_path = "out/dual_branch_cnn_model.h5"
+    model_path = "out/dual_branch_cnn_model.keras"
+
     try:
-        with custom_object_scope({'DualBranchCNN': DualBranchCNN}):  # Registra la classe personalizzata
-            loaded_model = tf.keras.models.load_model(model_path)
-            print(f"Modello caricato da {model_path}")
+        # Costruisci modello con stessa architettura
+        wrapped_model = DualBranchCNN()
+
+        # Carica SOLO i pesi (serve che tu li abbia salvati con model.save_weights(...))
+        wrapped_model.model.load_weights(model_path)
+        print(f"Modello caricato da {model_path}")
     except OSError:
         print(f"Errore: Impossibile caricare il modello da {model_path}. Assicurati che il file esista.")
         return
 
-    test_model(loaded_model)
+    test_model(wrapped_model)
