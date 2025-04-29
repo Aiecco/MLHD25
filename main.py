@@ -1,4 +1,4 @@
-from src.Utils.labels_ordering import train_labels, val_labels, test_labels
+from src.utils.labels_ordering import train_labels, val_labels, test_labels
 from src.pipelines.dualbranchCNN import pipeline_dualbranchCNN
 
 
@@ -13,7 +13,7 @@ def main():
     #val_labels(val_path)
 
     # First idea:
-    pipeline_dualbranchCNN(preprocess=False, training=False, epochs=10)
+    pipeline_dualbranchCNN(preprocess=False, training=True, epochs=10)
 
 
 if __name__ == '__main__':

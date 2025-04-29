@@ -3,7 +3,7 @@ import tensorflow as tf
 from keras.src.saving import custom_object_scope
 
 from src.Models.DualBranchCNN import DualBranchCNN
-from src.Utils.save_tensors import save_tensors
+from src.utils.save_tensors import save_tensors
 from src.plot.plot_training_progress import plot_training_progress
 from src.preprocessing.preprocess import preprocess_dataset
 from src.preprocessing.preprocess_images import plot_tensor_image
@@ -65,7 +65,7 @@ def pipeline_dualbranchCNN(preprocess=False, training=False, epochs=10):
 
     # Avvia il training
     if training:
-        training_history = train_model(model, num_epochs=epochs, batch_size=32, learning_rate=1e-3)
+        training_history = train_model(model, num_epochs=epochs, batch_size=64, learning_rate=1e-3)
         #plot_training_progress(epoch_train_losses, epoch_val_losses)
 
     # test model

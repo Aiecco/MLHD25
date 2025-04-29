@@ -2,8 +2,8 @@ import os
 import tensorflow as tf
 from tensorflow.keras import losses
 
-from src.Utils.filelabels_search import filelabels_search
-from src.Utils.load_tensors import load_tensor
+from src.utils.filelabels_search import filelabels_search
+from src.utils.load_tensors import load_tensor
 
 
 class CustomMAE(tf.keras.metrics.MeanAbsoluteError):
