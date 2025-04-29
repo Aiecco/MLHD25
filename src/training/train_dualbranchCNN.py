@@ -665,7 +665,7 @@ def train_model(model, train_files_path='data/Train/tensors', val_files_path='da
     
     try:
         # Salva il modello nel formato compatibile con TensorFlow/Keras recente
-        model.save(save_path, save_format='keras')
+        model.save(save_path)
         print(f"Modello salvato con successo in {save_path}")
     except Exception as e:
         print(f"Errore durante il salvataggio del modello: {str(e)}")

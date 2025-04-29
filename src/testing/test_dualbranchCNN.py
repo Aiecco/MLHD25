@@ -6,6 +6,11 @@ from src.Utils.filelabels_search import filelabels_search
 from src.Utils.load_tensors import load_tensor
 
 
+class CustomMAE(tf.keras.metrics.MeanAbsoluteError):
+    def __init__(self, name='mae', **kwargs):
+        super(CustomMAE, self).__init__(name=name, **kwargs)
+
+
 def test_model(model, test_files_path='data/Test/tensors', batch_size=32):
     """
     Funzione per testare il modello e calcolare l'errore percentuale medio, la loss e l'errore medio in mesi sui dati di test.
@@ -46,15 +51,23 @@ def test_model(model, test_files_path='data/Test/tensors', batch_size=32):
 
     # Calcola la loss, l'errore percentuale medio e l'errore medio in mesi sui dati di test
     loss_fn = losses.MeanSquaredError()
+    mae_metric = CustomMAE()
+
     total_loss = 0.0
     total_percent_error = 0.0
-    total_absolute_error = 0.0  # Errore assoluto totale
+    total_absolute_error = 0.0
     num_batches = 0
 
     for pooled_input, heatmap_input, gender_input, age_target in test_dataset:
-        outputs = model(pooled_input, heatmap_input, gender_input, training=False)
+        outputs = model({'pooled_input': pooled_input,
+                         'heatmap_input': heatmap_input,
+                         'gender_input': gender_input}, training=False)
+
         loss = loss_fn(age_target, tf.squeeze(outputs))
         total_loss += loss.numpy() * pooled_input.shape[0]
+
+        # Update MAE metric
+        mae_metric.update_state(age_target, tf.squeeze(outputs))
 
         age_target_np = age_target.numpy()
         outputs_np = tf.squeeze(outputs).numpy()
@@ -66,8 +79,8 @@ def test_model(model, test_files_path='data/Test/tensors', batch_size=32):
     avg_loss = total_loss / num_batches
     avg_percent_error = total_percent_error / num_batches
     avg_absolute_error = total_absolute_error / num_batches
-    avg_months_error = avg_absolute_error * 12  # Converte l'errore medio in mesi
+    avg_months_error = avg_absolute_error
+    avg_mae = mae_metric.result().numpy()
 
     print(f"Test Loss: {avg_loss:.4f}")
-    print(f"Test Errore Percentuale Medio: {avg_percent_error:.2f}%")
     print(f"Test Errore Medio in Mesi: {avg_months_error:.2f} mesi")
