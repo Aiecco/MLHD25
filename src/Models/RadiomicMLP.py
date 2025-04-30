@@ -1,0 +1,22 @@
+from tensorflow.keras import Model
+from tensorflow.keras.layers import Dense, Dropout
+
+# ----------------------------
+# 2) MLP per vettore radiomico
+# ---------------------------
+class RadiomicsMLP(Model):
+    def __init__(self, hidden_units=[64, 32], dropout=0.3, **kwargs):
+        super().__init__(**kwargs)
+        self.net = []
+        for u in hidden_units:
+            self.net.append(Dense(u, activation='relu'))
+            self.net.append(Dropout(dropout))
+
+    def call(self, x, training=False):
+        for layer in self.net:
+            # Dropout riceve training flag
+            if isinstance(layer, Dropout):
+                x = layer(x, training=training)
+            else:
+                x = layer(x)
+        return x
