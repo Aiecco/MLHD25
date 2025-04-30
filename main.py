@@ -12,7 +12,7 @@ def main():
     #test_labels(test_path)
     #val_labels(val_path)
 
-    radiograph_pipeline(epochs=5)
+    radiograph_pipeline(epochs=1, training=True)
 
 
 if __name__ == '__main__':

@@ -15,6 +15,9 @@ class AgeEstimator(Model):
                  max_years=20,
                  **kwargs):
         super().__init__(**kwargs)
+        self.input_shape = input_shape
+        self.radiomics_dim = radiomics_dim
+        self.max_years = max_years
 
         self.backbone = RadiographBackbone()
         self.rad_mlp = RadiomicsMLP()
@@ -25,7 +28,18 @@ class AgeEstimator(Model):
         self.grl_head = GradientReversal(hp_lambda=0.5)
         self.adv_head = GenderAdversarialHead()
 
-    def call(self, img, rad, gender, training=False):
+    def call(self, inputs, training=False):
+        if isinstance(inputs, dict):
+            img = inputs.get('radiograph', inputs.get('img', None))
+            rad = inputs.get('radiomics', inputs.get('rad', None))
+            gender = inputs.get('gender', None)
+        elif isinstance(inputs, (list, tuple)) and len(inputs) >= 2:
+            img = inputs[0]
+            rad = inputs[1]
+            gender = inputs[2] if len(inputs) > 2 else None
+        else:
+            raise ValueError("Input format not recognized")
+
         feat_img = self.backbone(img, training=training)
         feat_rad = self.rad_mlp(rad, training=training)
 
@@ -41,14 +55,21 @@ class AgeEstimator(Model):
         h_rev = self.grl_head(h)
         gender_pred = self.adv_head(h_rev)
 
-        return {'ord_logits': ord_logits, 'month_out': month_out, 'gender_pred': gender_pred}
+        return {'ordinal_output': ord_logits, 'month_output': month_out, 'gender_out': gender_pred}
 
     def build_graph(self):
-        img_input = Input(shape=(128, 128, 1), name='radiograph')
-        rad_input = Input(shape=(4,), name='radiomics')
+        img_input = Input(shape=self.input_shape, name='radiograph')
+        rad_input = Input(shape=(self.radiomics_dim,), name='radiomics')
 
-        outputs = self.call(img_input, rad_input, gender=None, training=False)
+        outputs = self.call({'radiograph': img_input, 'radiomics': rad_input}, training=False)
 
-        return Model(inputs=[img_input, rad_input], outputs={"ordinal_output": outputs['ord_logits'],
-                                                             "month_output": outputs['month_out'],
-                                                             "gender_out": outputs['gender_pred']})
+        return Model(inputs=[img_input, rad_input], outputs=outputs)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'input_shape': self.input_shape,
+            'radiomics_dim': self.radiomics_dim,
+            'max_years': self.max_years
+        })
+        return config

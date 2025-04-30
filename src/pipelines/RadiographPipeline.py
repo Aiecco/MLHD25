@@ -1,16 +1,27 @@
 import os.path
 
+from src.Models.CNNbackbone import RadiographBackbone
+from src.Models.CoarseFineHead import CoarseFineHead
+from src.Models.GenderAdversarialHead import GenderAdversarialHead
+from src.Models.GradientReversal import GradientReversal
 from src.Models.OrdinalRegressor import AgeEstimator
+from src.Models.RadiomicMLP import RadiomicsMLP
 from src.dataset.RadiographDataset import RadiographDatasetBuilder
 import tensorflow as tf
 
 from src.loss.CoralLoss import coral_loss
-from src.loss.MonthsMAE import months_mae
+from src.loss.YearLoss import years_exact_acc, years_within_one_acc, years_within_two_acc, months_mae
 from src.radiomics.RadiomicPreprocess import preprocess_radiomics
+from src.testing.AgePrediction import predict_and_evaluate
+from src.testing.Evaluation import evaluate_age_predictions
+from src.testing.RadiographTesting import test_model
 from src.training.RadiographTraining import train_model
+from src.utils.DisplayResults import display_evaluation_results
+from src.utils.LoadModel import try_load_directly, load_saved_model
+from src.utils.SaveModel import save_model_properly
 
 
-def radiograph_pipeline(preprocess=False, epochs=30):
+def radiograph_pipeline(preprocess=False, training=False, epochs=30):
     # Estrazione radiomiche
     if preprocess:
         preprocess_radiomics("data/Train/train_samples", "data/Train/radiomics")
@@ -60,7 +71,7 @@ def radiograph_pipeline(preprocess=False, epochs=30):
         optimizer='adam',
         loss={
             "ordinal_output": coral_loss,  # Loss per ord_logits (primo output)
-            "month_output": 'mse',  # Loss per month_out (secondo output)
+            "month_output": 'mae',  # Loss per month_out (secondo output)
             "gender_out": 'binary_crossentropy'  # Loss per gender_pred (terzo output)
         },
         loss_weights={
@@ -69,13 +80,43 @@ def radiograph_pipeline(preprocess=False, epochs=30):
             "gender_out": lambda_adversarial  # Peso per la loss del genere (controlla GRL)
         },
         metrics={
-            'coarse_fine_head': [months_mae],  # Applica months_mae all'output della testa età/mesi
+            'coarse_fine_head': [months_mae, years_exact_acc, years_within_one_acc, years_within_two_acc],
             # Assicurati che months_mae funzioni con i target giusti
             'gender_adversarial_head': ['accuracy']  # Applica accuracy alla predizione del genere
         }
     )
 
-    trained = train_model(model_graph, train_ds, epochs, batch_size=16, validation_data=val_ds)
+    if training:
+        trained, age_metrics_callback = train_model(model_graph, train_ds, epochs, batch_size=16, validation_data=val_ds)
 
-    # salvi l'intero modello (architettura + pesi + optimizer state)
-    trained.save("out/age_estimator.keras")
+        # Supponiamo che model_graph sia il tuo modello già compilato e addestrato
+        save_path = "out"
+        os.makedirs(save_path, exist_ok=True)
+        save_model_properly(model_graph, save_path)
+
+        # Alla fine del training, visualizza l'andamento delle metriche
+        age_metrics_callback.plot_metrics_history()
+
+        # Valuta il modello sul test set con visualizzazioni dettagliate
+        test_results = predict_and_evaluate(model, test_ds, plot_results=True)
+        print(f"MAE finale (mesi): {test_results['MAE (mesi)']:.2f}")
+        print(f"Accuratezza anno esatto: {test_results['Accuratezza anno esatto (%)']:.2f}%")
+
+
+    model_path = "out"
+    # Tenta prima il caricamento diretto
+    loaded_model = try_load_directly(model_path)
+
+    # Se fallisce, carica il modello dai pesi
+    if loaded_model is None:
+        loaded_model = load_saved_model(model_path)
+
+    # Se abbiamo caricato con successo il modello, valutiamolo sul test set
+    if loaded_model is not None:
+        # Valuta il modello
+        results = predict_and_evaluate(loaded_model, test_ds, plot_results=True)
+
+        # Ora hai tutte le metriche e le visualizzazioni per la discussione dei risultati
+        display_evaluation_results(results)
+    else:
+        print("Impossibile caricare il modello. Verifica i percorsi e le definizioni delle classi personalizzate.")
