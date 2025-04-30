@@ -1,6 +1,8 @@
 import tensorflow as tf
 
+from src.Models.AGECallback import AgeMetricsCallback
 from src.plot.EpochPlotCallback import EpochPlotCallback
+from src.testing.Evaluation import evaluate_age_predictions
 
 
 def train_model(model, dataset, epochs=30, batch_size=16, validation_data=None):
@@ -43,12 +45,15 @@ def train_model(model, dataset, epochs=30, batch_size=16, validation_data=None):
 
     # 3) Callback per il plot
     plot_cb = EpochPlotCallback()
+    # Crea il callback
+    age_metrics_callback = AgeMetricsCallback(validation_data=val_ds, frequency=5)
 
     # 4) Fit col validation_data
-    model.fit(
+    history = model.fit(
         train_ds,
         epochs=epochs,
         validation_data=val_ds,
-        callbacks=[plot_cb]
+        callbacks=[age_metrics_callback, plot_cb]
     )
-    return model
+
+    return model, age_metrics_callback

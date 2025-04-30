@@ -8,6 +8,8 @@ from tensorflow.keras.layers import Conv2D, BatchNormalization, MaxPooling2D, Gl
 class RadiographBackbone(Model):
     def __init__(self, filters=[32, 64, 128], kernel_size=3, **kwargs):
         super().__init__(**kwargs)
+        self.filters = filters
+        self.kernel_size = kernel_size
         self.convs = []
         for f in filters:
             self.convs.append(Conv2D(f, kernel_size, padding='same', activation='relu'))
@@ -23,3 +25,11 @@ class RadiographBackbone(Model):
             else:
                 x = layer(x)
         return self.global_pool(x)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'filters': self.filters,
+            'kernel_size': self.kernel_size
+        })
+        return config

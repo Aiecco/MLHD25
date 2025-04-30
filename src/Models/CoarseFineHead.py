@@ -18,3 +18,10 @@ class CoarseFineHead(Model):
 
     def call(self, x):
         return self.ordinal(x), self.residual(x)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'max_years': self.max_years
+        })
+        return config

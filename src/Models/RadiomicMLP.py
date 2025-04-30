@@ -7,6 +7,8 @@ from tensorflow.keras.layers import Dense, Dropout
 class RadiomicsMLP(Model):
     def __init__(self, hidden_units=[64, 32], dropout=0.3, **kwargs):
         super().__init__(**kwargs)
+        self.hidden_units = hidden_units
+        self.dropout_rate = dropout
         self.net = []
         for u in hidden_units:
             self.net.append(Dense(u, activation='relu'))
@@ -20,3 +22,11 @@ class RadiomicsMLP(Model):
             else:
                 x = layer(x)
         return x
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            'hidden_units': self.hidden_units,
+            'dropout': self.dropout_rate
+        })
+        return config
