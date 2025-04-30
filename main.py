@@ -1,3 +1,4 @@
+from src.pipelines.RadiographPipeline import radiograph_pipeline
 from src.utils.labels_ordering import train_labels, val_labels, test_labels
 
 
@@ -11,7 +12,7 @@ def main():
     #test_labels(test_path)
     #val_labels(val_path)
 
-
+    radiograph_pipeline(epochs=5)
 
 
 if __name__ == '__main__':
