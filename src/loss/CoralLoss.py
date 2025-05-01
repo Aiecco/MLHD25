@@ -1,5 +1,8 @@
 import tensorflow as tf
+from keras.src.saving import register_keras_serializable
 
+
+@register_keras_serializable(package="Custom")
 def coral_loss(y_true_years, logits):
     """Loss CORAL per la classificazione ordinale degli anni"""
     if len(y_true_years.shape) == 2 and y_true_years.shape[-1] == 1:

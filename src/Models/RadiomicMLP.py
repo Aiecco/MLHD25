@@ -1,9 +1,11 @@
+from keras.src.saving import register_keras_serializable
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Dense, Dropout
 
 # ----------------------------
 # 2) MLP per vettore radiomico
 # ---------------------------
+@register_keras_serializable(package="Custom")
 class RadiomicsMLP(Model):
     def __init__(self, hidden_units=[64, 32], dropout=0.3, **kwargs):
         super().__init__(**kwargs)

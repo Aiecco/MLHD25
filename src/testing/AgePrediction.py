@@ -1,4 +1,8 @@
 import tensorflow as tf
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import pandas as pd
 
 
 def predict_and_evaluate(model, test_ds, plot_results=True):
@@ -42,7 +46,11 @@ def predict_and_evaluate(model, test_ds, plot_results=True):
             y_true_years = None
 
         # Fai la predizione
-        predictions = model.predict(inputs, verbose=0)
+        inputs_batched = {
+            'radiograph': tf.expand_dims(inputs['radiograph'], 0),
+            'radiomics': tf.expand_dims(inputs['radiomics'], 0)
+        }
+        predictions = model.predict(inputs_batched, verbose=0)
 
         # Estrai le predizioni rilevanti
         if isinstance(predictions, dict):

@@ -1,5 +1,8 @@
 import tensorflow as tf
+from keras.src.saving import register_keras_serializable
 
+
+@register_keras_serializable(package="Custom")
 def months_mae(y_true_months, y_pred):
     """Calcola l'errore medio assoluto in mesi per la predizione dell'età"""
     ord_logits = y_pred[0]
@@ -8,6 +11,7 @@ def months_mae(y_true_months, y_pred):
     est_months = est_years * 12.0 + tf.squeeze(month_pred, -1)
     return tf.reduce_mean(tf.abs(est_months - y_true_months))
 
+@register_keras_serializable(package="Custom")
 def years_exact_acc(y_true_months, y_pred):
     """Calcola l'accuratezza (esatta) della predizione degli anni"""
     ord_logits = y_pred[0]
@@ -15,6 +19,7 @@ def years_exact_acc(y_true_months, y_pred):
     true_years = tf.floor(y_true_months / 12.0)
     return tf.reduce_mean(tf.cast(tf.equal(est_years, true_years), tf.float32))
 
+@register_keras_serializable(package="Custom")
 def years_within_one_acc(y_true_months, y_pred):
     """Calcola l'accuratezza della predizione degli anni entro ±1 anno"""
     ord_logits = y_pred[0]
@@ -23,6 +28,7 @@ def years_within_one_acc(y_true_months, y_pred):
     within_one = tf.abs(est_years - true_years) <= 1
     return tf.reduce_mean(tf.cast(within_one, tf.float32))
 
+@register_keras_serializable(package="Custom")
 def years_within_two_acc(y_true_months, y_pred):
     """Calcola l'accuratezza della predizione degli anni entro ±2 anni"""
     ord_logits = y_pred[0]
@@ -31,6 +37,7 @@ def years_within_two_acc(y_true_months, y_pred):
     within_two = tf.abs(est_years - true_years) <= 2
     return tf.reduce_mean(tf.cast(within_two, tf.float32))
 
+@register_keras_serializable(package="Custom")
 def months_mae(y_true_months, y_pred):
     """Calcola l'errore medio assoluto in mesi per la predizione dell'età"""
     ord_logits = y_pred[0]

@@ -1,6 +1,7 @@
+from keras.src.saving import register_keras_serializable
 from tensorflow.keras import layers, Model
 
-
+@register_keras_serializable(package="Custom")
 class GenderAdversarialHead(Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

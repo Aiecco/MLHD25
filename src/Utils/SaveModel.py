@@ -8,7 +8,7 @@ def save_model_properly(model, save_path):
     os.makedirs(save_path, exist_ok=True)
 
     # 1. Salva i pesi del modello separatamente
-    model.save_weights(os.path.join(save_path, "model_weights.weights.h5"))
+    model.save_weights(os.path.join(save_path, "age_estimator.weights.h5"))
 
     # 2. Salva le configurazioni dei componenti personalizzati
     components_config = {
@@ -23,7 +23,7 @@ def save_model_properly(model, save_path):
 
     # 3. Tenta di salvare il modello intero (potrebbe non funzionare al caricamento)
     try:
-        model.save(os.path.join(save_path, "model_full.h5"))
+        model.save(os.path.join(save_path, "age_estimator.h5"))
         print("Modello completo salvato con successo.")
     except Exception as e:
         print(f"Errore nel salvare il modello completo: {e}")

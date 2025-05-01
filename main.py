@@ -1,4 +1,5 @@
 from src.pipelines.RadiographPipeline import radiograph_pipeline
+from src.utils.LoadStructure import load_structure
 from src.utils.labels_ordering import train_labels, val_labels, test_labels
 
 
@@ -12,7 +13,8 @@ def main():
     #test_labels(test_path)
     #val_labels(val_path)
 
-    radiograph_pipeline(epochs=1, training=True)
+    radiograph_pipeline(epochs=1)
+    #load_structure()
 
 
 if __name__ == '__main__':

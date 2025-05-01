@@ -1,7 +1,8 @@
 import tensorflow as tf
+from keras.src.saving import register_keras_serializable
 from tensorflow.keras.layers import Layer
 
-
+@register_keras_serializable(package="Custom")
 class GradientReversal(tf.keras.layers.Layer):
     def __init__(self, hp_lambda=1.0, **kwargs):
         super().__init__(**kwargs)

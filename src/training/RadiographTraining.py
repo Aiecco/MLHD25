@@ -1,8 +1,7 @@
 import tensorflow as tf
 
-from src.Models.AGECallback import AgeMetricsCallback
+from src.plot.AGECallback import AgeMetricsCallback
 from src.plot.EpochPlotCallback import EpochPlotCallback
-from src.testing.Evaluation import evaluate_age_predictions
 
 
 def train_model(model, dataset, epochs=30, batch_size=16, validation_data=None):

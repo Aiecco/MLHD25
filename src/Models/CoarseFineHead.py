@@ -1,3 +1,4 @@
+from keras.src.saving import register_keras_serializable
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Dense
 
@@ -7,6 +8,7 @@ from tensorflow.keras.layers import Dense
 #    - ordinal regression sugli anni (CORAL)
 #    - regressione mesi residui
 # ----------------------------
+@register_keras_serializable(package="Custom")
 class CoarseFineHead(Model):
     def __init__(self, max_years=20, **kwargs):
         super().__init__(**kwargs)

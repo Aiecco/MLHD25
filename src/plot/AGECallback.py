@@ -20,6 +20,10 @@ class AgeMetricsCallback(tf.keras.callbacks.Callback):
         }
 
     def on_epoch_end(self, epoch, logs=None):
+        if epoch == 0:  # solo a inizio
+            print("DEBUG CALLBACK log keys:", logs.keys())
+
+            
         if (epoch + 1) % self.frequency == 0:
             # Valutazione delle metriche
             results = evaluate_age_predictions(self.model, self.validation_data, plot_results=False)
