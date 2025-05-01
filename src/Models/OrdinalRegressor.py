@@ -15,7 +15,7 @@ from src.Models.RadiomicMLP import RadiomicsMLP
 class AgeEstimator(Model):
     def __init__(self,
                  input_shape=(128, 128, 1),
-                 radiomics_dim=4,
+                 radiomics_dim=38,
                  max_years=20,
                  l2_reg=0.001,
                  **kwargs):
@@ -61,15 +61,14 @@ class AgeEstimator(Model):
         h = self.dropout(h, training=training)
 
         # Outputs
-        ord_logits, month_out = self.head(h)
+        age_pred_months = self.head(h)
 
         # Task avversariale con GRL stabile
         h_rev = self.grl_head(h)
         gender_pred = self.adv_head(h_rev)
 
         return {
-            'ordinal_output': ord_logits,
-            'month_output': month_out,
+            'month_output': age_pred_months,
             'gender_out': gender_pred
         }
 

@@ -13,8 +13,6 @@ def predict_and_evaluate(model, test_ds, plot_results=True):
     true_months_list = []
     pred_months_list = []
     errors_list = []
-    true_years_list = []
-    pred_years_list = []
 
     # Estrazione delle predizioni
     for batch in test_ds:
@@ -37,13 +35,10 @@ def predict_and_evaluate(model, test_ds, plot_results=True):
         # Gestisci il formato del target
         if isinstance(y, dict):
             y_true_months = y.get('coarse_fine_head', y.get('total_months', None))
-            y_true_years = y.get('ordinal_output', None)
         elif isinstance(y, (list, tuple)):
             y_true_months = y[0]
-            y_true_years = None
         else:
             y_true_months = y
-            y_true_years = None
 
         # Fai la predizione
         inputs_batched = {
@@ -54,55 +49,32 @@ def predict_and_evaluate(model, test_ds, plot_results=True):
 
         # Estrai le predizioni rilevanti
         if isinstance(predictions, dict):
-            ord_logits = predictions.get('ordinal_output', None)
             month_pred = predictions.get('month_output', None)
         elif isinstance(predictions, (list, tuple)):
-            ord_logits, month_pred = predictions[0], predictions[1]
+            month_pred = predictions[0]
         else:
             raise ValueError("Formato di output del modello non supportato")
 
-        # Calcola i mesi totali stimati
-        est_years = tf.reduce_sum(tf.cast(ord_logits > 0.5, tf.float32), axis=1)
-        est_months = est_years * 12.0 + tf.squeeze(month_pred, -1)
-
-        # Estrai gli anni stimati e veri per confronti
-        if y_true_years is not None:
-            true_years = tf.reduce_sum(tf.cast(y_true_years >= 1, tf.float32), axis=1)
-        else:
-            true_years = tf.floor(y_true_months / 12.0)
-
         # Calcola gli errori
-        errors = tf.abs(est_months - y_true_months)
+        errors = tf.abs(month_pred - y_true_months)
 
         # Aggiungi alle liste
         true_months_list.extend(y_true_months.numpy().flatten())
-        pred_months_list.extend(est_months.numpy().flatten())
+        pred_months_list.extend(month_pred.flatten())
         errors_list.extend(errors.numpy().flatten())
-        true_years_list.extend(true_years.numpy().flatten())
-        pred_years_list.extend(est_years.numpy().flatten())
 
     # Calcola metriche
     from sklearn.metrics import mean_absolute_error
     mae_months = mean_absolute_error(true_months_list, pred_months_list)
     mae_years = mae_months / 12.0
 
-    # Calcola percentuali di accuratezza per diverse soglie
-    accuracy_exact_year = np.mean(np.array(true_years_list) == np.array(pred_years_list)) * 100
-    within_1_year = np.mean(np.abs(np.array(true_years_list) - np.array(pred_years_list)) <= 1) * 100
-    within_2_years = np.mean(np.abs(np.array(true_years_list) - np.array(pred_years_list)) <= 2) * 100
-
     results = {
         'MAE (mesi)': mae_months,
         'MAE (anni)': mae_years,
-        'Accuratezza anno esatto (%)': accuracy_exact_year,
-        'Accuratezza entro 1 anno (%)': within_1_year,
-        'Accuratezza entro 2 anni (%)': within_2_years,
         'Predizioni': {
             'età_vera_mesi': true_months_list,
             'età_pred_mesi': pred_months_list,
             'errori_assoluti': errors_list,
-            'età_vera_anni': true_years_list,
-            'età_pred_anni': pred_years_list
         }
     }
 
@@ -110,9 +82,6 @@ def predict_and_evaluate(model, test_ds, plot_results=True):
     print("\n==== RISULTATI VALUTAZIONE ====")
     print(f"MAE (mesi): {mae_months:.2f}")
     print(f"MAE (anni): {mae_years:.2f}")
-    print(f"Accuratezza anno esatto: {accuracy_exact_year:.2f}%")
-    print(f"Accuratezza entro ±1 anno: {within_1_year:.2f}%")
-    print(f"Accuratezza entro ±2 anni: {within_2_years:.2f}%")
 
     # Visualizzazioni
     if plot_results:
@@ -139,9 +108,8 @@ def predict_and_evaluate(model, test_ds, plot_results=True):
         plt.subplot(2, 2, 3)
 
         # Crea fasce d'età
-        age_bins = [0, 36, 72, 120, 180, 240, 300, 360, 420, 480, 600, 720, 960]
-        age_labels = ['0-3', '3-6', '6-10', '10-15', '15-20', '20-25', '25-30', '30-35', '35-40', '40-50', '50-60',
-                      '60+']
+        age_bins = [0, 36, 72, 120, 180, 240]
+        age_labels = ['0-3', '3-6', '6-10', '10-15', '15-20']
 
         # Crea una serie pandas per l'età
         age_series = pd.Series(true_months_list)
@@ -168,12 +136,12 @@ def predict_and_evaluate(model, test_ds, plot_results=True):
         pred_years_array = np.array(pred_months_list) / 12
 
         # Crea una matrice per la heatmap
-        heatmap_data = np.zeros((10, 10))
-        year_bins = np.linspace(0, 80, 11)
+        heatmap_data = np.zeros((5, 5))
+        year_bins = np.linspace(0, 20, 4)
 
         for i in range(len(true_years_array)):
-            true_bin = min(int(true_years_array[i] // 8), 9)
-            pred_bin = min(int(pred_years_array[i] // 8), 9)
+            true_bin = min(int(true_years_array[i] // 5), 6)
+            pred_bin = min(int(pred_years_array[i] // 5), 6)
             heatmap_data[true_bin, pred_bin] += 1
 
         # Normalizza per riga
@@ -181,8 +149,8 @@ def predict_and_evaluate(model, test_ds, plot_results=True):
         heatmap_data_norm = np.divide(heatmap_data, row_sums, out=np.zeros_like(heatmap_data), where=row_sums != 0)
 
         sns.heatmap(heatmap_data_norm, cmap='YlGnBu',
-                    xticklabels=[f'{i}-{i + 8}' for i in range(0, 80, 8)],
-                    yticklabels=[f'{i}-{i + 8}' for i in range(0, 80, 8)])
+                    xticklabels=[f'{i}-{i + 8}' for i in range(0, 20, 5)],
+                    yticklabels=[f'{i}-{i + 8}' for i in range(0, 20, 5)])
         plt.xlabel('Età predetta (anni)')
         plt.ylabel('Età vera (anni)')
         plt.title('Distribuzione delle predizioni per fascia d\'età')

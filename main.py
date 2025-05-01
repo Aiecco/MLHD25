@@ -1,6 +1,4 @@
 from src.pipelines.RadiographPipeline import radiograph_pipeline
-from src.utils.LoadStructure import load_structure
-from src.utils.labels_ordering import train_labels, val_labels, test_labels
 
 
 def main():
@@ -13,7 +11,7 @@ def main():
     # test_labels(test_path)
     # val_labels(val_path)
 
-    radiograph_pipeline(epochs=5, training=True, batch_size=16)
+    radiograph_pipeline(epochs=5, training=True, batch_size=64, loss_weight_gender=-0.2, loss_weight_month=1, preprocess=True)
     # load_structure()
 
 

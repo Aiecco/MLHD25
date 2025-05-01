@@ -1,47 +1,14 @@
 import tensorflow as tf
 from keras.src.saving import register_keras_serializable
 
-
 @register_keras_serializable(package="Custom")
-def months_mae(y_true_months, y_pred):
-    """Calcola l'errore medio assoluto in mesi per la predizione dell'età"""
-    ord_logits = y_pred[0]
-    month_pred = y_pred[1]
-    est_years = tf.reduce_sum(tf.cast(ord_logits > 0.5, tf.float32), axis=1)
-    est_months = est_years * 12.0 + tf.squeeze(month_pred, -1)
-    return tf.reduce_mean(tf.abs(est_months - y_true_months))
-
-@register_keras_serializable(package="Custom")
-def years_exact_acc(y_true_months, y_pred):
-    """Calcola l'accuratezza (esatta) della predizione degli anni"""
-    ord_logits = y_pred[0]
-    est_years = tf.reduce_sum(tf.cast(ord_logits > 0.5, tf.float32), axis=1)
-    true_years = tf.floor(y_true_months / 12.0)
-    return tf.reduce_mean(tf.cast(tf.equal(est_years, true_years), tf.float32))
-
-@register_keras_serializable(package="Custom")
-def years_within_one_acc(y_true_months, y_pred):
-    """Calcola l'accuratezza della predizione degli anni entro ±1 anno"""
-    ord_logits = y_pred[0]
-    est_years = tf.reduce_sum(tf.cast(ord_logits > 0.5, tf.float32), axis=1)
-    true_years = tf.floor(y_true_months / 12.0)
-    within_one = tf.abs(est_years - true_years) <= 1
-    return tf.reduce_mean(tf.cast(within_one, tf.float32))
-
-@register_keras_serializable(package="Custom")
-def years_within_two_acc(y_true_months, y_pred):
-    """Calcola l'accuratezza della predizione degli anni entro ±2 anni"""
-    ord_logits = y_pred[0]
-    est_years = tf.reduce_sum(tf.cast(ord_logits > 0.5, tf.float32), axis=1)
-    true_years = tf.floor(y_true_months / 12.0)
-    within_two = tf.abs(est_years - true_years) <= 2
-    return tf.reduce_mean(tf.cast(within_two, tf.float32))
-
-@register_keras_serializable(package="Custom")
-def months_mae(y_true_months, y_pred):
-    """Calcola l'errore medio assoluto in mesi per la predizione dell'età"""
-    ord_logits = y_pred[0]
-    month_pred = y_pred[1]
-    est_years = tf.reduce_sum(tf.cast(ord_logits > 0.5, tf.float32), axis=1)
-    est_months = est_years * 12.0 + tf.squeeze(month_pred, -1)
-    return tf.reduce_mean(tf.abs(est_months - y_true_months))
+def months_mae(y_true_months, y_pred_months):
+    """
+    y_true_months: [batch] vera età in mesi
+    y_pred_months: [batch,1] età stimata in mesi dal modello
+    Ritorna l'MAE medio in mesi.
+    """
+    # riduci a shape [batch]
+    y_pred = tf.squeeze(y_pred_months, axis=-1)
+    # MAE
+    return tf.reduce_mean(tf.abs(y_pred - y_true_months))

@@ -3,8 +3,8 @@ from src.Models.OrdinalRegressor import AgeEstimator
 from src.dataset.RadiographDataset import RadiographDatasetBuilder
 import tensorflow as tf
 
-from src.loss.CoralLoss import coral_ordinal_loss
-from src.loss.YearLoss import years_exact_acc, years_within_one_acc, years_within_two_acc, months_mae
+from src.loss.CoralLoss import coral_loss
+from src.loss.YearLoss import months_mae
 from src.radiomics.RadiomicPreprocess import preprocess_radiomics
 from src.testing.AgePrediction import predict_and_evaluate
 from src.testing.Evaluation import evaluate_age_predictions
@@ -16,7 +16,7 @@ from src.utils.LoadModel import load_saved_model
 from src.utils.SaveModel import save_model_properly
 
 
-def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=64):
+def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=64, loss_weight_gender=-0.1, loss_weight_month=0.7):
     # Estrazione radiomiche
     if preprocess:
         preprocess_radiomics("data/Train/train_samples", "data/Train/radiomics")
@@ -48,8 +48,8 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
         batch_size=64
     ).build(shuffle=False)
 
-    radiomics_dim = 4
-    max_years = 100
+    radiomics_dim = 38
+    max_years = 20
     model = AgeEstimator(input_shape=(128, 128, 1),
                          radiomics_dim=radiomics_dim,
                          max_years=max_years)
@@ -59,31 +59,26 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
     tf.keras.utils.plot_model(model_graph, show_shapes=True)
 
     # --- Compilazione del Modello ---
-    lambda_adversarial = - 0.1  # Peso per la loss avversaria (robustezza genere)
-    weight_months = 0.5  # Peso per la loss dei mesi residui (relativo agli anni)
-
     model_graph.compile(
         optimizer='adam',
         loss={
-            "ordinal_output": coral_ordinal_loss,  # Loss per ord_logits (primo output)
             "month_output": 'mae',  # Loss per month_out (secondo output)
             "gender_out": 'binary_crossentropy'  # Loss per gender_pred (terzo output)
         },
         loss_weights={
-            "ordinal_output": 1.0,  # Peso per la loss degli anni
-            "month_output": weight_months,  # Peso per la loss dei mesi
-            "gender_out": lambda_adversarial  # Peso per la loss del genere (controlla GRL)
+            "month_output": loss_weight_month,  # Peso per la loss dei mesi
+            "gender_out": loss_weight_gender  # Peso per la loss del genere (controlla GRL)
         },
         metrics={
-            'coarse_fine_head': [months_mae, years_exact_acc, years_within_one_acc, years_within_two_acc],
+            'coarse_fine_head': [months_mae],
             # Assicurati che months_mae funzioni con i target giusti
             'gender_adversarial_head': ['accuracy']  # Applica accuracy alla predizione del genere
         }
     )
 
     if training:
-        #trained, age_metrics_callback = train_model(model_graph, train_ds, epochs, batch_size=batch_size, validation_data=val_ds)
-        trained, age_metrics_callback = train_model_with_monitoring(model_graph, train_ds, batch_size=batch_size, epochs=5, validation_data=val_ds)
+        trained, age_metrics_callback = train_model(model_graph, train_ds, epochs, batch_size=batch_size, validation_data=val_ds)
+        #trained, age_metrics_callback = train_model_with_monitoring(model_graph, train_ds, batch_size=batch_size, epochs=5, validation_data=val_ds)
 
         # Supponiamo che model_graph sia il tuo modello già compilato e addestrato
         save_path = "out"
@@ -97,12 +92,11 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
         # Valuta il modello sul test set con visualizzazioni dettagliate
         test_results = predict_and_evaluate(model, test_ds, plot_results=True)
         print(f"MAE finale (mesi): {test_results['MAE (mesi)']:.2f}")
-        print(f"Accuratezza anno esatto: {test_results['Accuratezza anno esatto (%)']:.2f}%")
 
 
     model_path = "out"
     # Tenta prima il caricamento diretto
-    loaded_model = load_saved_model(model_path)
+    loaded_model = load_saved_model(model_path, loss_weight_month, loss_weight_gender)
 
     # Se abbiamo caricato con successo il modello, valutiamolo sul test set
     if loaded_model is not None:

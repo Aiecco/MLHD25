@@ -1,32 +1,21 @@
 import tensorflow as tf
 from keras.src.saving import register_keras_serializable
 
-
 @register_keras_serializable(package="Custom")
-def coral_ordinal_loss(y_true_years, ord_logits):
-    """
-    y_true_years: [batch] valori interi in [0, max_years)
-    ord_logits:   [batch, max_years] logit per ciascuna soglia
-    Ritorna la somma di BCE su ciascuna soglia.
-    """
-    # 1) Crea una matrice [batch, max_years] di truth per ogni soglia:
-    #    per ciascun sample, per soglia k,
-    #    truth = 1 se y_true_years > k, 0 altrimenti.
-    y_true_years = tf.cast(y_true_years, tf.int32)
-    max_years = tf.shape(ord_logits)[1]
-    # broadcast range [0,1,2,...,max_years-1] su batch
-    thresholds = tf.range(max_years)[None, :]  # shape [1, max_years]
-    y_true_thresholds = tf.cast(y_true_years[:, None] > thresholds, tf.float32)
+def coral_loss(y_true_years, logits):
+    """Loss CORAL per la classificazione ordinale degli anni"""
+    if len(y_true_years.shape) == 2 and y_true_years.shape[-1] == 1:
+        y_true_years = tf.squeeze(y_true_years, axis=-1)
 
-    # 2) BCE tra logits e truth per ogni soglia
-    bce = tf.keras.losses.binary_crossentropy(
-        y_true_thresholds,
-        tf.nn.sigmoid(ord_logits)
-    )
-    # 3) Media o somma su soglie e batch
-    #    qui sommiamo su soglie e facciamo media sul batch
-    loss = tf.reduce_mean(tf.reduce_sum(bce, axis=1))
-    return loss
+    levels = tf.cast(tf.range(1, logits.shape[-1] + 1)[tf.newaxis, :], tf.float32)
+    y_true_rep = tf.tile(tf.expand_dims(y_true_years, -1), [1, logits.shape[-1]])
+    target = tf.cast(y_true_rep >= levels, tf.float32)  # target binario
+
+    # Applichiamo sigmoid prima di loss se non è già nel modello
+    probs = tf.sigmoid(logits)
+    bce = tf.keras.losses.binary_crossentropy(target, probs)
+
+    return tf.reduce_mean(bce)
 
 @register_keras_serializable(package="Custom")
 def combined_loss(y_true_months, y_pred):

@@ -16,7 +16,7 @@ def train_model(model, dataset, epochs=30, batch_size=16, validation_data=None):
         .map(
             lambda features, labels: (
                 (features[0], features[1]),  # img, radiomics, gender_input
-                (labels[0], labels[1], labels[2])                     # age_year, age_month, gender
+                (labels[0], labels[1])                     # age_year, age_month, gender
             ),
             num_parallel_calls=tf.data.AUTOTUNE
         )
@@ -32,7 +32,7 @@ def train_model(model, dataset, epochs=30, batch_size=16, validation_data=None):
             .map(
                 lambda features, labels: (
                     (features[0], features[1]),
-                    (labels[0], labels[1], labels[2]),
+                    (labels[0], labels[1]),
                 ),
                 num_parallel_calls=tf.data.AUTOTUNE
             )
