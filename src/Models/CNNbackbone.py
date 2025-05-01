@@ -1,10 +1,11 @@
 # ----------------------------
 # 1) Backbone CNN per radiografie
 # ----------------------------
+from keras.src.saving import register_keras_serializable
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Conv2D, BatchNormalization, MaxPooling2D, GlobalAveragePooling2D
 
-
+@register_keras_serializable(package="Custom")
 class RadiographBackbone(Model):
     def __init__(self, filters=[32, 64, 128], kernel_size=3, **kwargs):
         super().__init__(**kwargs)

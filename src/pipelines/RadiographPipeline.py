@@ -17,7 +17,7 @@ from src.testing.Evaluation import evaluate_age_predictions
 from src.testing.RadiographTesting import test_model
 from src.training.RadiographTraining import train_model
 from src.utils.DisplayResults import display_evaluation_results
-from src.utils.LoadModel import try_load_directly, load_saved_model
+from src.utils.LoadModel import load_saved_model
 from src.utils.SaveModel import save_model_properly
 
 
@@ -93,6 +93,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30):
         save_path = "out"
         os.makedirs(save_path, exist_ok=True)
         save_model_properly(model_graph, save_path)
+        trained.save("out/age_estimator.keras")
 
         # Alla fine del training, visualizza l'andamento delle metriche
         age_metrics_callback.plot_metrics_history()
@@ -105,11 +106,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30):
 
     model_path = "out"
     # Tenta prima il caricamento diretto
-    loaded_model = try_load_directly(model_path)
-
-    # Se fallisce, carica il modello dai pesi
-    if loaded_model is None:
-        loaded_model = load_saved_model(model_path)
+    loaded_model = load_saved_model(model_path)
 
     # Se abbiamo caricato con successo il modello, valutiamolo sul test set
     if loaded_model is not None:

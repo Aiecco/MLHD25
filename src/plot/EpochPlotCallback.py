@@ -1,5 +1,5 @@
-import matplotlib.pyplot as plt
 import os
+import matplotlib.pyplot as plt
 import tensorflow as tf
 
 class EpochPlotCallback(tf.keras.callbacks.Callback):
@@ -12,16 +12,22 @@ class EpochPlotCallback(tf.keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
+        if epoch == 0:
+            print("DEBUG CALLBACK log keys:", logs.keys())
 
-        self.train_losses.append(logs.get("loss"))
+        # 1) Nuova figura
+        plt.figure()
+
+        # 2) Recupera e salva i valori
+        train_loss = logs.get("loss")
+        if train_loss is not None:
+            self.train_losses.append(train_loss)
+
         val_loss = logs.get("val_loss")
         if val_loss is not None:
             self.val_losses.append(val_loss)
 
-        # Clear the previous plot
-        plt.clf()
-
-        # Plot
+        # 3) Disegna
         plt.plot(self.train_losses, label="Training Loss")
         if self.val_losses:
             plt.plot(self.val_losses, label="Validation Loss")
@@ -30,7 +36,8 @@ class EpochPlotCallback(tf.keras.callbacks.Callback):
         plt.title("Loss over epochs")
         plt.legend()
 
-        # Save the figure
+        # 4) Salva e chiudi
         filepath = os.path.join(self.save_dir, f"epoch_{epoch+1:03d}.png")
         plt.savefig(filepath)
+        plt.close()
         print(f"Saved plot to {filepath}")

@@ -45,7 +45,10 @@ class RadiographDatasetBuilder:
         stem_tensor = tf.strings.split(fname_tensor, '.')[0]
         fname = stem_tensor.numpy().decode()  # Esegui .numpy() e .decode() solo qui
 
-        age_months = float(self.age_map[fname])
+        try:
+            age_months = float(self.age_map[fname])
+        except ValueError:
+            age_months = float(self.age_map[fname].replace(',', '.'))
 
         # Converti age_months in anni e mesi
         age_year = age_months // 12
