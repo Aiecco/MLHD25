@@ -50,19 +50,15 @@ class RadiographDatasetBuilder:
         except ValueError:
             age_months = float(self.age_map[fname].replace(',', '.'))
 
-        # Converti age_months in anni e mesi
-        age_year = age_months // 12
-        age_month = age_months % 12
-
         gender = float(self.gender_map[fname])
 
         # 3) Carica radiomics precomputate
         rad_path = tf.strings.join([self.base_dir, "/radiomics/", stem_tensor, ".npy"])
         rad_feats = tf.numpy_function(func=load_features, inp=[rad_path], Tout=tf.float32)
-        rad_feats.set_shape((4,))
+        rad_feats.set_shape((38,))
 
         # Ritorna 4 valori piatti: img, rad_feats, gender, age_year, age_month
-        return img, rad_feats, gender, age_year, age_month
+        return img, rad_feats, gender, age_months
 
     def build(self, shuffle=True):
         pattern = os.path.join(self.img_subfolder, "*.png")
@@ -70,19 +66,18 @@ class RadiographDatasetBuilder:
 
         def _tf_parse(fp):
             # tf.py_function deve restituire un elenco piatto
-            img, rad, gender, age_year, age_month = tf.py_function(
+            img, rad, gender, age_months = tf.py_function(
                 func=self._parse_function,
                 inp=[fp],
-                Tout=[tf.float32, tf.float32, tf.float32, tf.float32, tf.float32]
+                Tout=[tf.float32, tf.float32, tf.float32, tf.float32]
             )
             # Imposta le shape statiche su ciascun tensor
             img.set_shape((*self.img_size, 1))
-            rad.set_shape((4,))
+            rad.set_shape((38,))
             gender.set_shape(())
-            age_year.set_shape(())
-            age_month.set_shape(())
+            age_months.set_shape(())
             # Ricompone la struttura
-            return (img, rad), (age_year, age_month, gender)
+            return (img, rad), (age_months, gender)
 
         ds = ds.map(_tf_parse, num_parallel_calls=tf.data.AUTOTUNE)
 

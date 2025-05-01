@@ -1,8 +1,10 @@
 import os
 
 import numpy as np
-from skimage.feature import graycomatrix, graycoprops
+from scipy.stats import skew, kurtosis
+from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 import tensorflow as tf
+from skimage.filters import sobel
 
 
 # ----------------------------
@@ -11,28 +13,63 @@ import tensorflow as tf
 
 # Utilità: estrazione radiomics tramite tf.py_function
 def _extract_radiomics_py(image_path, filename_base, output_dir):
-    """
-    Funzione numpy per estrazione Haralick via skimage e salvataggio features.
-    """
     try:
         image_path = image_path.numpy().decode('utf-8')
-        # Carica l'immagine utilizzando TensorFlow (assicurati che sia un formato supportato)
         image_tensor = tf.io.read_file(image_path)
-        image = tf.image.decode_image(image_tensor, channels=1).numpy()  # Forza in scala di grigi
-
+        image = tf.image.decode_image(image_tensor, channels=1).numpy()
         img_uint8 = (image.squeeze() * 255).astype(np.uint8)
-        glcm = graycomatrix(img_uint8, distances=[1], angles=[0], levels=256,
+
+        # ------------------------------
+        # GLCM: 4 angoli, 5 proprietà
+        # ------------------------------
+        angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
+        glcm = graycomatrix(img_uint8, distances=[1], angles=angles, levels=256,
                             symmetric=True, normed=True)
-        props = ['contrast', 'dissimilarity', 'homogeneity', 'energy']
-        feats = np.array([graycoprops(glcm, prop)[0, 0] for prop in props], dtype=np.float32)
+        props = ['contrast', 'dissimilarity', 'homogeneity', 'ASM', 'correlation']
+        glcm_feats = []
+        for prop in props:
+            values = graycoprops(glcm, prop)[0]  # valori per i 4 angoli
+            glcm_feats.extend(values)
 
-        # Salva le features
+        # ------------------------------
+        # First-order statistics
+        # ------------------------------
+        vals = img_uint8.flatten()
+        hist_vals, _ = np.histogram(vals, bins=256, range=(0, 256), density=True)
+        entropy = -np.sum(hist_vals * np.log2(hist_vals + 1e-12))
+        first_order_feats = [
+            np.mean(vals), np.std(vals),
+            skew(vals), kurtosis(vals),
+            entropy
+        ]
+
+        # ------------------------------
+        # LBP histogram (uniform pattern)
+        # ------------------------------
+        lbp = local_binary_pattern(img_uint8, P=8, R=1, method='uniform')
+        lbp_hist, _ = np.histogram(lbp.ravel(), bins=np.arange(0, 10), range=(0, 9), density=True)
+        lbp_feats = lbp_hist.tolist()
+
+        # ------------------------------
+        # Sobel edge statistics
+        # ------------------------------
+        sob = sobel(img_uint8)
+        sobel_feats = [
+            np.mean(sob), np.std(sob),
+            np.max(sob), np.min(sob)
+        ]
+
+        # ------------------------------
+        # Feature vector completo
+        # ------------------------------
+        feats = np.array(glcm_feats + first_order_feats + lbp_feats + sobel_feats, dtype=np.float32)
+
         save_features(feats, filename_base, output_dir)
-
         return feats
+
     except Exception as e:
         print(f"Errore nell'elaborazione di {image_path}: {e}")
-        return np.array([np.nan] * 4, dtype=np.float32)  # Restituisci un array di NaN in caso di errore
+        return np.array([np.nan] * 39, dtype=np.float32)
 
 
 def extract_radiomics_tf(image_path, filename_base, output_dir):
@@ -44,7 +81,7 @@ def extract_radiomics_tf(image_path, filename_base, output_dir):
         [image_path, filename_base, output_dir],
         tf.float32
     )
-    feats.set_shape((4,))
+    feats.set_shape((38,))
     return feats
 
 

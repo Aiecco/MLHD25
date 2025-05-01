@@ -12,8 +12,6 @@ class EpochPlotCallback(tf.keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
-        if epoch == 0:
-            print("DEBUG CALLBACK log keys:", logs.keys())
 
         # 1) Nuova figura
         plt.figure()

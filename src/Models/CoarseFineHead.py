@@ -1,4 +1,5 @@
 from keras.src.saving import register_keras_serializable
+import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.regularizers import l2
@@ -29,7 +30,17 @@ class CoarseFineHead(Model):
 
     def call(self, x):
         shared_feat = self.shared(x)
-        return self.ordinal(shared_feat), self.residual(shared_feat)
+        ord_logits = self.ordinal(shared_feat)  # [batch, max_years]
+        resid_pred = self.residual(shared_feat)  # [batch,1]
+
+        # 1) passare da logit ordinali a probabilità
+        probs = ord_logits  # se hai sigmoid integrato
+        # 2) contare quante soglie superi → anni predetti
+        years_pred = tf.reduce_sum(tf.cast(probs > 0.5, tf.float32), axis=1, keepdims=True)  # [batch,1]
+        # 3) età in mesi totale
+        age_pred_mths = years_pred * 12.0 + resid_pred  # [batch,1] + [batch,1] = [batch,1]
+
+        return age_pred_mths
 
     def get_config(self):
         config = super().get_config()
