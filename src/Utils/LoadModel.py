@@ -8,11 +8,10 @@ from src.Models.CNNbackbone import RadiographBackbone
 from src.Models.GradientReversal import GradientReversal
 from src.Models.OrdinalRegressor import AgeEstimator
 from src.Models.RadiomicMLP import RadiomicsMLP
-from src.loss.CoralLoss import coral_ordinal_loss
-from src.loss.YearLoss import months_mae, years_exact_acc
+from src.loss.YearLoss import months_mae
 
 
-def load_saved_model(model_path):
+def load_saved_model(model_path, loss_weight_month, loss_weight_gender):
     """
     Carica un modello AgeEstimator completo. Priorità:
     1. Caricamento da file .keras (salvataggio completo)
@@ -30,9 +29,7 @@ def load_saved_model(model_path):
                 "GenderAdversarialHead": GenderAdversarialHead,
                 "CoarseFineHead": CoarseFineHead,
                 "AgeEstimator": AgeEstimator,
-                "coral_loss": coral_ordinal_loss,
-                "months_mae": months_mae,
-                "years_exact_acc": years_exact_acc
+                "months_mae": months_mae
             })
             print("✅ Modello caricato direttamente con successo.")
             return model
@@ -51,8 +48,8 @@ def load_saved_model(model_path):
         print("⚠️ File di configurazione non trovato. Uso config di default.")
         config = {
             'input_shape': (128, 128, 1),
-            'radiomics_dim': 4,
-            'max_years': 100
+            'radiomics_dim': 38,
+            'max_years': 20
         }
 
     # Istanzia modello subclassed
@@ -69,14 +66,12 @@ def load_saved_model(model_path):
     model_graph.compile(
         optimizer='adam',
         loss={
-            "ordinal_output": coral_ordinal_loss,
             "month_output": 'mae',
             "gender_out": 'binary_crossentropy'
         },
         loss_weights={
-            "ordinal_output": 1.0,
-            "month_output": 0.5,
-            "gender_out": -0.1
+            "month_output": loss_weight_month,
+            "gender_out": loss_weight_gender
         },
         metrics={
             'coarse_fine_head': [months_mae],
