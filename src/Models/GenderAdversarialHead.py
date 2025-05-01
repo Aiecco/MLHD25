@@ -1,17 +1,21 @@
+from keras.src.layers import Dense
 from keras.src.saving import register_keras_serializable
 from tensorflow.keras import layers, Model
+from tensorflow.keras.regularizers import l2
+
 
 @register_keras_serializable(package="Custom")
 class GenderAdversarialHead(Model):
-    def __init__(self, **kwargs):
+    def __init__(self, l2_reg=0.001, **kwargs):
         super().__init__(**kwargs)
-        self.dense1 = layers.Dense(32, activation='relu')
-        self.out = layers.Dense(1, activation='sigmoid', name='gender_pred')
+        # Semplificato a un solo layer
+        self.out = Dense(1, activation='sigmoid', name='gender_pred',
+                         kernel_regularizer=l2(l2_reg))
 
     def call(self, x, training=False):
-        x = self.dense1(x)
         return self.out(x)
 
     def get_config(self):
         config = super().get_config()
         return config
+

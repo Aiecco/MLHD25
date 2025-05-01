@@ -1,27 +1,22 @@
 import os.path
-
-from src.Models.CNNbackbone import RadiographBackbone
-from src.Models.CoarseFineHead import CoarseFineHead
-from src.Models.GenderAdversarialHead import GenderAdversarialHead
-from src.Models.GradientReversal import GradientReversal
 from src.Models.OrdinalRegressor import AgeEstimator
-from src.Models.RadiomicMLP import RadiomicsMLP
 from src.dataset.RadiographDataset import RadiographDatasetBuilder
 import tensorflow as tf
 
-from src.loss.CoralLoss import coral_loss
+from src.loss.CoralLoss import coral_ordinal_loss
 from src.loss.YearLoss import years_exact_acc, years_within_one_acc, years_within_two_acc, months_mae
 from src.radiomics.RadiomicPreprocess import preprocess_radiomics
 from src.testing.AgePrediction import predict_and_evaluate
 from src.testing.Evaluation import evaluate_age_predictions
 from src.testing.RadiographTesting import test_model
 from src.training.RadiographTraining import train_model
+from src.training.RadiographTraining_2 import train_model_with_monitoring
 from src.utils.DisplayResults import display_evaluation_results
 from src.utils.LoadModel import load_saved_model
 from src.utils.SaveModel import save_model_properly
 
 
-def radiograph_pipeline(preprocess=False, training=False, epochs=30):
+def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=64):
     # Estrazione radiomiche
     if preprocess:
         preprocess_radiomics("data/Train/train_samples", "data/Train/radiomics")
@@ -34,7 +29,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30):
         label_csv="train_labels.csv",
         img_subfolder="train_samples",
         img_size=(128, 128),
-        batch_size=16
+        batch_size=64
     ).build(shuffle=True)
 
     val_ds = RadiographDatasetBuilder(
@@ -42,7 +37,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30):
         label_csv="val_labels.csv",
         img_subfolder="validation_samples",
         img_size=(128, 128),
-        batch_size=16
+        batch_size=64
     ).build(shuffle=False)
 
     test_ds = RadiographDatasetBuilder(
@@ -50,7 +45,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30):
         label_csv="test_labels.csv",
         img_subfolder="test_samples",
         img_size=(128, 128),
-        batch_size=16
+        batch_size=64
     ).build(shuffle=False)
 
     radiomics_dim = 4
@@ -70,7 +65,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30):
     model_graph.compile(
         optimizer='adam',
         loss={
-            "ordinal_output": coral_loss,  # Loss per ord_logits (primo output)
+            "ordinal_output": coral_ordinal_loss,  # Loss per ord_logits (primo output)
             "month_output": 'mae',  # Loss per month_out (secondo output)
             "gender_out": 'binary_crossentropy'  # Loss per gender_pred (terzo output)
         },
@@ -87,12 +82,13 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30):
     )
 
     if training:
-        trained, age_metrics_callback = train_model(model_graph, train_ds, epochs, batch_size=16, validation_data=val_ds)
+        #trained, age_metrics_callback = train_model(model_graph, train_ds, epochs, batch_size=batch_size, validation_data=val_ds)
+        trained, age_metrics_callback = train_model_with_monitoring(model_graph, train_ds, batch_size=batch_size, epochs=5, validation_data=val_ds)
 
         # Supponiamo che model_graph sia il tuo modello già compilato e addestrato
         save_path = "out"
         os.makedirs(save_path, exist_ok=True)
-        save_model_properly(model_graph, save_path)
+        #save_model_properly(model_graph, save_path)
         trained.save("out/age_estimator.keras")
 
         # Alla fine del training, visualizza l'andamento delle metriche
