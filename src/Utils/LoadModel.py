@@ -8,7 +8,7 @@ from src.Models.CNNbackbone import RadiographBackbone
 from src.Models.GradientReversal import GradientReversal
 from src.Models.OrdinalRegressor import AgeEstimator
 from src.Models.RadiomicMLP import RadiomicsMLP
-from src.loss.CoralLoss import coral_loss
+from src.loss.CoralLoss import coral_ordinal_loss
 from src.loss.YearLoss import months_mae, years_exact_acc
 
 
@@ -30,7 +30,7 @@ def load_saved_model(model_path):
                 "GenderAdversarialHead": GenderAdversarialHead,
                 "CoarseFineHead": CoarseFineHead,
                 "AgeEstimator": AgeEstimator,
-                "coral_loss": coral_loss,
+                "coral_loss": coral_ordinal_loss,
                 "months_mae": months_mae,
                 "years_exact_acc": years_exact_acc
             })
@@ -69,7 +69,7 @@ def load_saved_model(model_path):
     model_graph.compile(
         optimizer='adam',
         loss={
-            "ordinal_output": coral_loss,
+            "ordinal_output": coral_ordinal_loss,
             "month_output": 'mae',
             "gender_out": 'binary_crossentropy'
         },
