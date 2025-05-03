@@ -136,12 +136,12 @@ def predict_and_evaluate(model, test_ds, plot_results=True):
         pred_years_array = np.array(pred_months_list) / 12
 
         # Crea una matrice per la heatmap
-        heatmap_data = np.zeros((5, 5))
+        heatmap_data = np.zeros((4, 4))
         year_bins = np.linspace(0, 20, 4)
 
         for i in range(len(true_years_array)):
-            true_bin = min(int(true_years_array[i] // 5), 6)
-            pred_bin = min(int(pred_years_array[i] // 5), 6)
+            true_bin = min(int(true_years_array[i] // 5), 3)
+            pred_bin = min(int(pred_years_array[i] // 5), 3)
             heatmap_data[true_bin, pred_bin] += 1
 
         # Normalizza per riga

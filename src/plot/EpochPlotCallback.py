@@ -38,4 +38,4 @@ class EpochPlotCallback(tf.keras.callbacks.Callback):
         filepath = os.path.join(self.save_dir, f"epoch_{epoch+1:03d}.png")
         plt.savefig(filepath)
         plt.close()
-        print(f"Saved plot to {filepath}")
+        print(f" - Saved plot to {filepath}")

@@ -119,11 +119,11 @@ def evaluate_age_predictions(model, val_dataset, plot_results=True):
         pred_years_array = np.array(pred_months_list) / 12
 
         # Crea una matrice per la heatmap
-        heatmap_data = np.zeros((5, 5))
+        heatmap_data = np.zeros((4, 4))
 
         for i in range(len(true_years_array)):
-            true_bin = min(int(true_years_array[i] // 5), 6)
-            pred_bin = min(int(pred_years_array[i] // 5), 6)
+            true_bin = min(int(true_years_array[i] // 3), 4)
+            pred_bin = min(int(pred_years_array[i] // 3), 4)
             heatmap_data[true_bin, pred_bin] += 1
 
         # Normalizza per riga
