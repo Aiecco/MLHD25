@@ -16,7 +16,7 @@ from src.utils.LoadModel import load_saved_model
 from src.utils.SaveModel import save_model_properly
 
 
-def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=64, loss_weight_gender=-0.1, loss_weight_month=0.7):
+def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=64, loss_ordinal_logits=1, loss_weight_gender=-0.1, loss_weight_month=0.7):
     # Estrazione radiomiche
     if preprocess:
         preprocess_radiomics("data/Train/train_samples", "data/Train/radiomics")
@@ -29,7 +29,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
         label_csv="train_labels.csv",
         img_subfolder="train_samples",
         img_size=(128, 128),
-        batch_size=64
+        batch_size=batch_size
     ).build(shuffle=True)
 
     val_ds = RadiographDatasetBuilder(
@@ -37,7 +37,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
         label_csv="val_labels.csv",
         img_subfolder="validation_samples",
         img_size=(128, 128),
-        batch_size=64
+        batch_size=batch_size
     ).build(shuffle=False)
 
     test_ds = RadiographDatasetBuilder(
@@ -45,7 +45,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
         label_csv="test_labels.csv",
         img_subfolder="test_samples",
         img_size=(128, 128),
-        batch_size=64
+        batch_size=batch_size
     ).build(shuffle=False)
 
     radiomics_dim = 38
@@ -62,17 +62,18 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
     model_graph.compile(
         optimizer='adam',
         loss={
-            "month_output": 'mae',  # Loss per month_out (secondo output)
-            "gender_out": 'binary_crossentropy'  # Loss per gender_pred (terzo output)
+            'month_output': 'mae',
+            'ordinal_logits': coral_loss,
+            'gender_out': 'binary_crossentropy'
         },
         loss_weights={
-            "month_output": loss_weight_month,  # Peso per la loss dei mesi
-            "gender_out": loss_weight_gender  # Peso per la loss del genere (controlla GRL)
+            'month_output': loss_weight_month,
+            'ordinal_logits': loss_ordinal_logits,  # tune as needed
+            'gender_out': loss_weight_gender
         },
         metrics={
-            'coarse_fine_head': [months_mae],
-            # Assicurati che months_mae funzioni con i target giusti
-            'gender_adversarial_head': ['accuracy']  # Applica accuracy alla predizione del genere
+            'month_output': [months_mae],
+            'gender_out': ['accuracy']
         }
     )
 
@@ -96,7 +97,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
 
     model_path = "out"
     # Tenta prima il caricamento diretto
-    loaded_model = load_saved_model(model_path, loss_weight_month, loss_weight_gender)
+    loaded_model = load_saved_model(model_path, loss_weight_month, loss_weight_gender, loss_ordinal_logits)
 
     # Se abbiamo caricato con successo il modello, valutiamolo sul test set
     if loaded_model is not None:

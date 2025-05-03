@@ -30,17 +30,16 @@ class CoarseFineHead(Model):
 
     def call(self, x):
         shared_feat = self.shared(x)
-        ord_logits = self.ordinal(shared_feat)  # [batch, max_years]
-        resid_pred = self.residual(shared_feat)  # [batch,1]
+        ord_logits = self.ordinal(shared_feat)   # <-- [batch, max_years]
+        resid_pred = self.residual(shared_feat)  # <-- [batch,1]
 
-        # 1) passare da logit ordinali a probabilità
-        probs = ord_logits  # se hai sigmoid integrato
-        # 2) contare quante soglie superi → anni predetti
-        years_pred = tf.reduce_sum(tf.cast(probs > 0.5, tf.float32), axis=1, keepdims=True)  # [batch,1]
-        # 3) età in mesi totale
-        age_pred_mths = years_pred * 12.0 + resid_pred  # [batch,1] + [batch,1] = [batch,1]
+        # convert logits -> age prediction
+        years_pred = tf.reduce_sum(tf.cast(ord_logits > 0.5, tf.float32),
+                                  axis=1, keepdims=True)
+        age_pred_mths = years_pred * 12.0 + resid_pred
 
-        return age_pred_mths
+        # **Return both** the month‐prediction *and* the raw logits
+        return age_pred_mths, ord_logits
 
     def get_config(self):
         config = super().get_config()

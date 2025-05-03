@@ -1,3 +1,4 @@
+from keras.src.layers import Activation
 from keras.src.saving import register_keras_serializable
 from tensorflow.keras import Input, Model
 from tensorflow.keras.layers import Dense, Dropout, Concatenate
@@ -27,6 +28,7 @@ class AgeEstimator(Model):
 
         # Componenti principali semplificati
         self.backbone = RadiographBackbone(filters=[16, 32, 64], l2_reg=l2_reg)
+
         self.rad_mlp = RadiomicsMLP(hidden_units=[32, 16], l2_reg=l2_reg)
 
         # Fusion semplificata
@@ -51,6 +53,7 @@ class AgeEstimator(Model):
 
         # Feature extraction
         feat_img = self.backbone(img, training=training)
+
         feat_rad = self.rad_mlp(rad, training=training)
 
         # Semplice concatenazione
@@ -60,16 +63,20 @@ class AgeEstimator(Model):
         h = self.fusion_dense(x)
         h = self.dropout(h, training=training)
 
-        # Outputs
-        age_pred_months = self.head(h)
-
-        # Task avversariale con GRL stabile
+        # … extract img & rad, compute `h` …
+        month_pred, ord_logits = self.head(h)
         h_rev = self.grl_head(h)
         gender_pred = self.adv_head(h_rev)
 
+        # wrap in a Keras layer so the rename works in Functional API:
+        month_t = Activation('linear', name='month_output')(month_pred)
+        ord_t = Activation('linear', name='ordinal_logits')(ord_logits)
+        gender_t = Activation('linear', name='gender_out')(gender_pred)
+
         return {
-            'month_output': age_pred_months,
-            'gender_out': gender_pred
+            'month_output': month_t,
+            'ordinal_logits': ord_t,
+            'gender_out': gender_t
         }
 
     def build_graph(self):
