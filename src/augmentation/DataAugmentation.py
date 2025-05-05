@@ -1,5 +1,7 @@
 
 import tensorflow as tf
+from keras.src.saving import register_keras_serializable
+
 
 # Costruiamo un piccolo Sequential di preprocessing:
 augmentation_layer = tf.keras.Sequential([

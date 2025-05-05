@@ -13,7 +13,7 @@ class AgeMetricsCallback(tf.keras.callbacks.Callback):
         self.frequency = frequency  # Ogni quante epoche calcolare le metriche
         self.history = {
             'epoch': [],
-            'MAE (mesi)': [],
+            'MSE (mesi)': [],
         }
 
     def on_epoch_end(self, epoch, logs=None):
@@ -23,21 +23,21 @@ class AgeMetricsCallback(tf.keras.callbacks.Callback):
 
             # Aggiorna la history
             self.history['epoch'].append(epoch + 1)
-            self.history['MAE (mesi)'].append(results['MAE (mesi)'])
+            self.history['MSE (mesi)'].append(results['MSE (mesi)'])
 
             # Stampa i risultati
             print(f"\nEpoch {epoch + 1} - Metriche età:")
-            print(f"MAE (mesi): {results['MAE (mesi)']:.2f}")
-            print(f"MAE (anni): {results['MAE (anni)']:.2f}")
+            print(f"MSE (mesi): {results['MSE (mesi)']:.2f}")
+            print(f"MSE (anni): {results['MSE (anni)']:.2f}")
 
     def plot_metrics_history(self):
         """Visualizza l'andamento delle metriche durante il training"""
         plt.figure(figsize=(15, 10))
 
         plt.subplot(2, 1, 1)
-        plt.plot(self.history['epoch'], self.history['MAE (mesi)'])
+        plt.plot(self.history['epoch'], self.history['MSE (mesi)'])
         plt.xlabel('Epoca')
-        plt.ylabel('MAE (mesi)')
+        plt.ylabel('MSE (mesi)')
         plt.title('Errore Medio Assoluto durante il training')
 
         plt.tight_layout()

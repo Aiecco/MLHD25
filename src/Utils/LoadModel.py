@@ -8,10 +8,12 @@ from src.Models.CNNbackbone import RadiographBackbone
 from src.Models.GradientReversal import GradientReversal
 from src.Models.OrdinalRegressor import AgeEstimator
 from src.Models.RadiomicMLP import RadiomicsMLP
-from src.loss.YearLoss import months_mae
+from src.Models.ResidualBlock import ResidualBlock
+from src.loss.CoralLoss import coral_loss
+from src.loss.YearLoss import months_mse
 
 
-def load_saved_model(model_path, loss_weight_month, loss_weight_gender):
+def load_saved_model(model_path, loss_weight_month, loss_ordinal_logits):
     """
     Carica un modello AgeEstimator completo. Priorità:
     1. Caricamento da file .keras (salvataggio completo)
@@ -23,13 +25,11 @@ def load_saved_model(model_path, loss_weight_month, loss_weight_gender):
         try:
             print(f"Tento il caricamento diretto da {model_file}...")
             model = load_model(model_file, custom_objects={
+                "ResidualBlock": ResidualBlock,
                 "RadiographBackbone": RadiographBackbone,
                 "RadiomicsMLP": RadiomicsMLP,
-                "GradientReversal": GradientReversal,
-                "GenderAdversarialHead": GenderAdversarialHead,
-                "CoarseFineHead": CoarseFineHead,
                 "AgeEstimator": AgeEstimator,
-                "months_mae": months_mae
+                "months_mse": months_mse
             })
             print("✅ Modello caricato direttamente con successo.")
             return model
@@ -65,18 +65,8 @@ def load_saved_model(model_path, loss_weight_month, loss_weight_gender):
     # Compilazione (come nel training)
     model_graph.compile(
         optimizer='adam',
-        loss={
-            "month_output": 'mae',
-            "gender_out": 'binary_crossentropy'
-        },
-        loss_weights={
-            "month_output": loss_weight_month,
-            "gender_out": loss_weight_gender
-        },
-        metrics={
-            'coarse_fine_head': [months_mae],
-            'gender_adversarial_head': ['accuracy']
-        }
+        loss=tf.keras.losses.huber,
+        metrics=[months_mse]
     )
 
     # Caricamento dei pesi

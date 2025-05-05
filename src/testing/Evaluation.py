@@ -1,4 +1,6 @@
 # Funzione per valutare il modello e raccogliere le predizioni e gli errori
+from keras.src.losses import mean_squared_error
+
 from src.utils.TotalMonths import calculate_total_months
 import tensorflow as tf
 import numpy as np
@@ -16,49 +18,36 @@ def evaluate_age_predictions(model, val_dataset, plot_results=True):
 
     # Valutazione su validation/test set
     for x_batch, y_batch in val_dataset:
-        # Estrai le età vere in mesi (suppongo che sia il primo elemento di y_batch)
-        if isinstance(y_batch, dict):
-            # Se stai usando un dizionario di output
-            y_true_months = y_batch.get('total_months', None)
-            if y_true_months is None and 'coarse_fine_head' in y_batch:
-                y_true_months = y_batch['coarse_fine_head']
-        elif isinstance(y_batch, (list, tuple)):
-            # Se stai usando una lista di output
-            y_true_months = y_batch[0]  # Adatta questo indice alla tua struttura
+        # y_batch è (age_months, 1)
+        if isinstance(y_batch, (list, tuple)):
+            y_true_months = y_batch[0].numpy()  # tensore scalare (batch_size,)
         else:
-            # Se è un singolo output
-            y_true_months = y_batch
+            y_true_months = y_batch.numpy()
 
-        # Fai la predizione
+        # Predizione (output diretto: (batch_size, 1))
         predictions = model.predict(x_batch, verbose=0)
+        if isinstance(predictions, list) or isinstance(predictions, tuple):
+            predictions = predictions[0]
 
-        # Estrai le predizioni rilevanti
-        if isinstance(predictions, dict):
-            month_pred = predictions.get('month_output', predictions.get('month_pred', None))
-        elif isinstance(predictions, (list, tuple)):
-            month_pred = predictions[1]
-        else:
-            # Se il modello restituisce un singolo output strutturato
-            raise ValueError("Formato di output del modello non supportato")
+        y_pred_months = predictions.squeeze()  # Rimuove dimensione extra se presente
 
-        # Calcola i mesi totali stimati
-        est_months = month_pred
+        # Raccogli risultati
+        true_months_list.extend(y_true_months)
+        y_pred_months = np.atleast_1d(y_pred_months)
+        pred_months_list.extend(y_pred_months)
 
-        # Calcola gli errori
-        errors = tf.abs(est_months - y_true_months)
 
-        # Aggiungi alle liste
-        true_months_list.extend(y_true_months.numpy().flatten())
-        pred_months_list.extend(est_months.flatten())
-        errors_list.extend(errors.numpy().flatten())
+        # Errori
+        errors = np.abs(y_true_months - y_pred_months)
+        errors_list.extend(errors)
 
     # Calcola metriche
-    mae_months = mean_absolute_error(true_months_list, pred_months_list)
+    mae_months = mean_squared_error(true_months_list, pred_months_list)
     mae_years = mae_months / 12.0
 
     results = {
-        'MAE (mesi)': mae_months,
-        'MAE (anni)': mae_years,
+        'MSE (mesi)': mae_months,
+        'MSE (anni)': mae_years,
         'Predizioni': {
             'età_vera_mesi': true_months_list,
             'età_pred_mesi': pred_months_list,

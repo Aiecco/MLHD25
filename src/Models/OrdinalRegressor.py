@@ -27,18 +27,24 @@ class AgeEstimator(Model):
         self.l2_reg = l2_reg
 
         # Componenti principali semplificati
-        self.backbone = RadiographBackbone(filters=[16, 32, 64], l2_reg=l2_reg)
+        self.backbone = RadiographBackbone(l2_reg=l2_reg)
 
         self.rad_mlp = RadiomicsMLP(hidden_units=[32, 16], l2_reg=l2_reg)
 
         # Fusion semplificata
-        self.fusion_dense = Dense(64, activation='relu', kernel_regularizer=l2(l2_reg))
+        #self.fusion_dense = Dense(64, activation='relu', kernel_regularizer=l2(l2_reg))
         self.dropout = Dropout(0.3)
+        self.dropout2 = Dropout(0.4)
+        self.dropout3 = Dropout(0.2)
+
+        # Dense merges
+        self.merged_dense1 = Dense(512, activation='relu', kernel_regularizer=l2(self.l2_reg))
+        self.merged_dense2 = Dense(256, activation='relu', kernel_regularizer=l2(self.l2_reg))
+        self.merged_dense3 = Dense(128, activation='relu', kernel_regularizer=l2(self.l2_reg))
 
         # Heads
-        self.head = CoarseFineHead(max_years=max_years, l2_reg=l2_reg)
-        self.grl_head = GradientReversal(hp_lambda=0.1)  # Lambda molto più basso
-        self.adv_head = GenderAdversarialHead(l2_reg=l2_reg)
+        #self.head = CoarseFineHead(max_years=max_years, l2_reg=l2_reg)
+        self.output_dense = Dense(1, name='total_months')
 
     def call(self, inputs, training=False):
         # Estrai input
@@ -52,32 +58,24 @@ class AgeEstimator(Model):
             raise ValueError("Input format not recognized")
 
         # Feature extraction
-        feat_img = self.backbone(img, training=training)
+        feat_img = self.backbone(img)
 
         feat_rad = self.rad_mlp(rad, training=training)
 
+        print(f'feat_rad.shape: {feat_rad.shape}')
+        print(f'feat_img.shape: {feat_img.shape}')
+
         # Semplice concatenazione
-        x = Concatenate()([feat_img, feat_rad])
+        merged = Concatenate()([feat_img, feat_rad])
 
-        # Fusion network semplificata
-        h = self.fusion_dense(x)
-        h = self.dropout(h, training=training)
-
-        # … extract img & rad, compute `h` …
-        month_pred, ord_logits = self.head(h)
-        h_rev = self.grl_head(h)
-        gender_pred = self.adv_head(h_rev)
-
-        # wrap in a Keras layer so the rename works in Functional API:
-        month_t = Activation('linear', name='month_output')(month_pred)
-        ord_t = Activation('linear', name='ordinal_logits')(ord_logits)
-        gender_t = Activation('linear', name='gender_out')(gender_pred)
-
-        return {
-            'month_output': month_t,
-            'ordinal_logits': ord_t,
-            'gender_out': gender_t
-        }
+        x = self.merged_dense1(merged)
+        x = self.dropout2(x)
+        x = self.merged_dense2(x)
+        x = self.dropout(x)
+        x = self.merged_dense3(x)
+        x = self.dropout3(x)
+        output = self.output_dense(x)
+        return output
 
     def build_graph(self):
         # Gestione sicura degli input shape
