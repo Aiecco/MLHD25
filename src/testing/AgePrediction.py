@@ -3,69 +3,40 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import pandas as pd
+from keras.src.losses import mean_squared_error
 
 
 def predict_and_evaluate(model, test_ds, plot_results=True):
-    """
-    Esegue predizioni sul test set e valuta le performance
-    """
     # Liste per memorizzare risultati
     true_months_list = []
     pred_months_list = []
     errors_list = []
 
-    # Estrazione delle predizioni
-    for batch in test_ds:
-        # Ottieni input e output
-        if isinstance(batch, tuple):
-            if len(batch) == 2:  # (x, y)
-                x, y = batch
-            else:  # (x, y, _) o altro
-                x, y = batch[0], batch[1]
+    # Valutazione su validation/test set
+    for x_batch, y_batch in test_ds:
+        # y_batch è (age_months, 1)
+        if isinstance(y_batch, (list, tuple)):
+            y_true_months = y_batch[0].numpy()  # tensore scalare (batch_size,)
         else:
-            raise ValueError("Formato del dataset non riconosciuto")
+            y_true_months = y_batch.numpy()
 
-        # Gestisci il formato di input
-        if isinstance(x, dict):
-            inputs = x
-        else:
-            # Se è un elenco di tensori, assumiamo che siano [img, rad]
-            inputs = {'radiograph': x[0], 'radiomics': x[1]}
+        # Predizione (output diretto: (batch_size, 1))
+        #print(f"feat_rad.shape: {x_batch[0].shape}, feat_img.shape: {x_batch[1].shape}")
+        predictions = model.predict(x_batch, verbose=0)
+        if isinstance(predictions, list) or isinstance(predictions, tuple):
+            predictions = predictions[0]
 
-        # Gestisci il formato del target
-        if isinstance(y, dict):
-            y_true_months = y.get('coarse_fine_head', y.get('total_months', None))
-        elif isinstance(y, (list, tuple)):
-            y_true_months = y[0]
-        else:
-            y_true_months = y
+        y_pred_months = predictions.squeeze()  # Rimuove dimensione extra se presente
 
-        # Fai la predizione
-        inputs_batched = {
-            'radiograph': tf.expand_dims(inputs['radiograph'], 0),
-            'radiomics': tf.expand_dims(inputs['radiomics'], 0)
-        }
-        predictions = model.predict(inputs_batched, verbose=0)
+        # Raccogli risultati
+        true_months_list.extend(y_true_months)
+        pred_months_list.extend(y_pred_months)
 
-        # Estrai le predizioni rilevanti
-        if isinstance(predictions, dict):
-            month_pred = predictions.get('month_output', None)
-        elif isinstance(predictions, (list, tuple)):
-            month_pred = predictions[0]
-        else:
-            raise ValueError("Formato di output del modello non supportato")
+        # Errori
+        errors = np.abs(y_true_months - y_pred_months)
+        errors_list.extend(errors)
 
-        # Calcola gli errori
-        errors = tf.abs(month_pred - y_true_months)
-
-        # Aggiungi alle liste
-        true_months_list.extend(y_true_months.numpy().flatten())
-        pred_months_list.extend(month_pred.flatten())
-        errors_list.extend(errors.numpy().flatten())
-
-    # Calcola metriche
-    from sklearn.metrics import mean_absolute_error
-    mae_months = mean_absolute_error(true_months_list, pred_months_list)
+    mae_months = mean_squared_error(true_months_list, pred_months_list)
     mae_years = mae_months / 12.0
 
     results = {
@@ -80,8 +51,8 @@ def predict_and_evaluate(model, test_ds, plot_results=True):
 
     # Stampa risultati
     print("\n==== RISULTATI VALUTAZIONE ====")
-    print(f"MAE (mesi): {mae_months:.2f}")
-    print(f"MAE (anni): {mae_years:.2f}")
+    print(f"MSE (mesi): {mae_months:.2f}")
+    print(f"MSE (anni): {mae_years:.2f}")
 
     # Visualizzazioni
     if plot_results:

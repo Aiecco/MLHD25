@@ -16,12 +16,12 @@ def train_model(model, dataset, epochs=30, batch_size=16, validation_data=None):
         .map(
             lambda features, labels: (
                 (features[0], features[1]),  # img, radiomics, gender_input
-                (labels[0], labels[1], labels[2])                     # age_year, age_month, gender
+                (labels[0])                     # age_year, age_month, gender
             ),
             num_parallel_calls=tf.data.AUTOTUNE
         )
         .shuffle(100)
-        .batch(batch_size)
+        .cache()
         .prefetch(tf.data.AUTOTUNE)
     )
 
@@ -32,11 +32,12 @@ def train_model(model, dataset, epochs=30, batch_size=16, validation_data=None):
             .map(
                 lambda features, labels: (
                     (features[0], features[1]),
-                    (labels[0], labels[1], labels[2]),
+                    (labels[0]),
                 ),
                 num_parallel_calls=tf.data.AUTOTUNE
             )
-            .batch(batch_size)
+            .shuffle(100)
+            .cache()
             .prefetch(tf.data.AUTOTUNE)
         )
     else:
@@ -45,7 +46,7 @@ def train_model(model, dataset, epochs=30, batch_size=16, validation_data=None):
     # 3) Callback per il plot
     plot_cb = EpochPlotCallback()
     # Crea il callback
-    age_metrics_callback = AgeMetricsCallback(validation_data=val_ds, frequency=5)
+    age_metrics_callback = AgeMetricsCallback(validation_data=val_ds, frequency=2)
 
     # 4) Fit col validation_data
     history = model.fit(

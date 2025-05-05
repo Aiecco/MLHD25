@@ -11,7 +11,7 @@ def main():
     # test_labels(test_path)
     # val_labels(val_path)
 
-    radiograph_pipeline(epochs=5, training=False, batch_size=64, loss_weight_gender=0.2, loss_weight_month=1, loss_ordinal_logits=1)
+    radiograph_pipeline(epochs=6, training=False, batch_size=64, loss_weight_month=1)
     # load_structure()
 
 

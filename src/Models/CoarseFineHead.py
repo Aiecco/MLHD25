@@ -18,14 +18,14 @@ class CoarseFineHead(Model):
         self.l2_reg = l2_reg
 
         # Layer condiviso più semplice
-        self.shared = Dense(32, activation='relu', kernel_regularizer=l2(l2_reg))
+        self.shared = Dense(16, activation='sigmoid', kernel_regularizer=l2(l2_reg))
 
         # Head A: ordinal anni (più stabile senza layer intermedi)
-        self.ordinal = Dense(max_years, activation='sigmoid', name='ordinal_years',
+        self.ordinal = Dense(max_years, activation='relu', name='ordinal_years',
                              kernel_regularizer=l2(l2_reg))
 
         # Head B: regressione mesi residui
-        self.residual = Dense(1, activation='linear', name='residual_months',
+        self.residual = Dense(1, activation='sigmoid', name='residual_months',
                               kernel_regularizer=l2(l2_reg))
 
     def call(self, x):

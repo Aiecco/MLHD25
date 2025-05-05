@@ -1,49 +1,51 @@
-from keras.src.layers import Activation, Dropout
+from keras.src.layers import Activation, Dropout, Dense
 from keras.src.saving import register_keras_serializable
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Conv2D, BatchNormalization, MaxPooling2D, GlobalAveragePooling2D
 from tensorflow.keras import backend as K  # Importa il backend di Keras
 from tensorflow.keras.regularizers import l2
 
+from src.Models.ResidualBlock import ResidualBlock
+
 
 @register_keras_serializable(package="Custom")
 class RadiographBackbone(Model):
-    def __init__(self, filters=[16, 32, 64], kernel_size=3, dropout_rate=0.2, l2_reg=0.001, **kwargs):
+    def __init__(self, kernel_size=2, dropout_rate=0.2, l2_reg=0.001, **kwargs):
         super().__init__(**kwargs)
-        self.filters = filters
         self.kernel_size = kernel_size
         self.dropout_rate = dropout_rate
         self.l2_reg = l2_reg
 
-        # Stack convoluzionale semplice ma stabile
-        self.convs = []
-        for f in filters:
-            # Conv + BN + ReLU
-            self.convs.append(Conv2D(f, kernel_size, padding='same', activation=None,
-                                     kernel_regularizer=l2(l2_reg)))
-            self.convs.append(BatchNormalization())
-            self.convs.append(Activation('relu'))
-            # Pooling
-            self.convs.append(MaxPooling2D(2))
-            # Dropout spaziale
-            self.convs.append(Dropout(dropout_rate))
+        self.conv = Conv2D(64, 7, strides=2, padding='same', activation='relu',
+                    kernel_regularizer=l2(self.l2_reg))
 
-        # Output pooling
-        self.global_pool = GlobalAveragePooling2D()
+        self.residual1 = ResidualBlock(filters=64, strides=1, use_pooling=False, l2_reg=self.l2_reg)
+        self.residual2 = ResidualBlock(filters=128, strides=2, use_pooling=False, l2_reg=self.l2_reg)
+        self.residual3 = ResidualBlock(filters=256, strides=2, use_pooling=False, l2_reg=self.l2_reg)
+        self.residual4 = ResidualBlock(filters=512, strides=2, use_pooling=False, l2_reg=self.l2_reg)
 
-    def call(self, x, training=False):
-        for layer in self.convs:
-            if isinstance(layer, (BatchNormalization, Dropout)):
-                x = layer(x, training=training)
-            else:
-                x = layer(x)
+        self.bn = BatchNormalization()
+        self.globpool = GlobalAveragePooling2D()
+        self.maxpool = MaxPooling2D(3, strides=2, padding='same')
+        self.dense = Dense(16, activation='relu')
 
-        return self.global_pool(x)
+    def call(self, x):
+        x = self.conv(x)
+        x = self.bn(x)
+        x = self.maxpool(x)
+
+        x = self.residual1(x)
+        x = self.residual2(x)
+        x = self.residual3(x)
+        x = self.residual4(x)
+
+        x = self.globpool(x)  # Applica davvero il pooling
+        x = self.dense(x)  # Riduci a 16 feature
+        return x
 
     def get_config(self):
         config = super().get_config()
         config.update({
-            'filters': self.filters,
             'kernel_size': self.kernel_size,
             'dropout_rate': self.dropout_rate,
             'l2_reg': self.l2_reg

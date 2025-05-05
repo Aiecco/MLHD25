@@ -2,6 +2,7 @@ import os
 import tensorflow as tf
 import pandas as pd
 
+from src.augmentation.DataAugmentation import augment_image
 from src.radiomics.RadiomicsFeature import load_features  # carica un .npy → numpy array
 
 class RadiographDatasetBuilder:
@@ -61,29 +62,32 @@ class RadiographDatasetBuilder:
         # Ritorna 4 valori piatti: img, rad_feats, gender, age_year, age_month
         return img, rad_feats, gender, age_months, age_years
 
-    def build(self, shuffle=True):
+    def build(self, train=True):
         pattern = os.path.join(self.img_subfolder, "*.png")
-        ds = tf.data.Dataset.list_files(pattern, shuffle=shuffle)
+        ds = tf.data.Dataset.list_files(pattern, shuffle=train)
 
         def _tf_parse(fp):
-            # tf.py_function deve restituire un elenco piatto
             img, rad, gender, age_months, age_years = tf.py_function(
                 func=self._parse_function,
                 inp=[fp],
                 Tout=[tf.float32, tf.float32, tf.float32, tf.float32, tf.float32]
             )
-            # Imposta le shape statiche su ciascun tensor
+
             img.set_shape((*self.img_size, 1))
             rad.set_shape((38,))
             gender.set_shape(())
             age_months.set_shape(())
             age_years.set_shape(())
-            # Ricompone la struttura
-            return (img, rad), (age_years, age_months, gender)
+
+            if train:
+                img = augment_image(img)
+
+            return (img, rad), (age_months, 1)
 
         ds = ds.map(_tf_parse, num_parallel_calls=tf.data.AUTOTUNE)
 
-        if shuffle:
+        if train:
             ds = ds.shuffle(100)
-        ds = ds.prefetch(tf.data.AUTOTUNE)
+
+        ds = ds.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
         return ds

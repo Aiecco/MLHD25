@@ -1,16 +1,18 @@
 import os.path
+
+import keras
+
 from src.Models.OrdinalRegressor import AgeEstimator
 from src.dataset.RadiographDataset import RadiographDatasetBuilder
 import tensorflow as tf
 
 from src.loss.CoralLoss import coral_loss
-from src.loss.YearLoss import months_mae
+from src.loss.YearLoss import months_mse
 from src.radiomics.RadiomicPreprocess import preprocess_radiomics
 from src.testing.AgePrediction import predict_and_evaluate
 from src.testing.Evaluation import evaluate_age_predictions
 from src.testing.RadiographTesting import test_model
 from src.training.RadiographTraining import train_model
-from src.training.RadiographTraining_2 import train_model_with_monitoring
 from src.utils.DisplayResults import display_evaluation_results
 from src.utils.LoadModel import load_saved_model
 from src.utils.SaveModel import save_model_properly
@@ -30,7 +32,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
         img_subfolder="train_samples",
         img_size=(128, 128),
         batch_size=batch_size
-    ).build(shuffle=True)
+    ).build(train=True)
 
     val_ds = RadiographDatasetBuilder(
         base_dir="data/Val",
@@ -38,7 +40,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
         img_subfolder="validation_samples",
         img_size=(128, 128),
         batch_size=batch_size
-    ).build(shuffle=False)
+    ).build(train=False)
 
     test_ds = RadiographDatasetBuilder(
         base_dir="data/Test",
@@ -46,7 +48,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
         img_subfolder="test_samples",
         img_size=(128, 128),
         batch_size=batch_size
-    ).build(shuffle=False)
+    ).build(train=False)
 
     radiomics_dim = 38
     max_years = 20
@@ -61,20 +63,21 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
     # --- Compilazione del Modello ---
     model_graph.compile(
         optimizer='adam',
-        loss={
-            'month_output': 'mae',
-            'ordinal_logits': coral_loss,
-            'gender_out': 'binary_crossentropy'
-        },
-        loss_weights={
-            'month_output': loss_weight_month,
-            'ordinal_logits': loss_ordinal_logits,  # tune as needed
-            'gender_out': loss_weight_gender
-        },
-        metrics={
-            'month_output': [months_mae],
-            'gender_out': ['accuracy']
-        }
+        loss= keras.src.losses.huber,
+        metrics=[months_mse]
+    )
+
+    test_dataset = (
+        test_ds
+        .map(
+            lambda features, labels: (
+                (features[0], features[1]),  # img, radiomics, gender_input
+                (labels[0])  # age_year, age_month, gender
+            ),
+            num_parallel_calls=tf.data.AUTOTUNE
+        )
+        .shuffle(100)
+        .prefetch(tf.data.AUTOTUNE)
     )
 
     if training:
@@ -91,18 +94,18 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
         age_metrics_callback.plot_metrics_history()
 
         # Valuta il modello sul test set con visualizzazioni dettagliate
-        test_results = predict_and_evaluate(model, test_ds, plot_results=True)
+        test_results = predict_and_evaluate(model, test_dataset, plot_results=True)
         print(f"MAE finale (mesi): {test_results['MAE (mesi)']:.2f}")
 
 
     model_path = "out"
     # Tenta prima il caricamento diretto
-    loaded_model = load_saved_model(model_path, loss_weight_month, loss_weight_gender, loss_ordinal_logits)
+    loaded_model = load_saved_model(model_path, loss_weight_month, loss_ordinal_logits)
 
     # Se abbiamo caricato con successo il modello, valutiamolo sul test set
     if loaded_model is not None:
         # Valuta il modello
-        results = predict_and_evaluate(loaded_model, test_ds, plot_results=True)
+        results = predict_and_evaluate(loaded_model, test_dataset, plot_results=True)
 
         # Ora hai tutte le metriche e le visualizzazioni per la discussione dei risultati
         display_evaluation_results(results)
