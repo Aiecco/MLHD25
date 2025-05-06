@@ -16,27 +16,33 @@ class RadiographBackbone(Model):
         self.dropout_rate = dropout_rate
         self.l2_reg = l2_reg
 
-        self.conv = Conv2D(64, 7, strides=2, padding='same', activation='relu',
+        self.conv = Conv2D(32, 7, strides=2, padding='same', activation='relu',
                     kernel_regularizer=l2(self.l2_reg))
 
-        self.residual1 = ResidualBlock(filters=64, strides=1, use_pooling=False, l2_reg=self.l2_reg)
-        self.residual2 = ResidualBlock(filters=128, strides=2, use_pooling=False, l2_reg=self.l2_reg)
-        self.residual3 = ResidualBlock(filters=256, strides=2, use_pooling=False, l2_reg=self.l2_reg)
-        self.residual4 = ResidualBlock(filters=512, strides=2, use_pooling=False, l2_reg=self.l2_reg)
+        self.residual1 = ResidualBlock(filters=32, strides=1, use_pooling=False, l2_reg=self.l2_reg)
+        self.residual2 = ResidualBlock(filters=64, strides=2, use_pooling=False, l2_reg=self.l2_reg)
+        self.residual3 = ResidualBlock(filters=128, strides=2, use_pooling=False, l2_reg=self.l2_reg)
+        self.residual4 = ResidualBlock(filters=256, strides=2, use_pooling=False, l2_reg=self.l2_reg)
 
-        self.bn = BatchNormalization()
+        self.bn1 = BatchNormalization()
+        self.bn2 = BatchNormalization()
+        self.bn3 = BatchNormalization()
+        self.bn4 = BatchNormalization()
         self.globpool = GlobalAveragePooling2D()
         self.maxpool = MaxPooling2D(3, strides=2, padding='same')
         self.dense = Dense(16, activation='relu')
 
     def call(self, x):
         x = self.conv(x)
-        x = self.bn(x)
+        x = self.bn1(x)
         x = self.maxpool(x)
 
         x = self.residual1(x)
+        x = self.bn2(x)
         x = self.residual2(x)
+        x = self.bn3(x)
         x = self.residual3(x)
+        x = self.bn4(x)
         x = self.residual4(x)
 
         x = self.globpool(x)  # Applica davvero il pooling

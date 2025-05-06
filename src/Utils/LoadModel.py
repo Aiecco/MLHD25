@@ -65,7 +65,7 @@ def load_saved_model(model_path, loss_weight_month, loss_ordinal_logits):
     # Compilazione (come nel training)
     model_graph.compile(
         optimizer='adam',
-        loss=tf.keras.losses.huber,
+        loss=tf.keras.losses.MeanSquaredError(),
         metrics=[months_mse]
     )
 
