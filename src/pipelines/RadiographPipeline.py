@@ -63,7 +63,7 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
     # --- Compilazione del Modello ---
     model_graph.compile(
         optimizer='adam',
-        loss= keras.src.losses.huber,
+        loss=tf.keras.losses.MeanSquaredError(),
         metrics=[months_mse]
     )
 
@@ -76,7 +76,6 @@ def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=
             ),
             num_parallel_calls=tf.data.AUTOTUNE
         )
-        .shuffle(100)
         .prefetch(tf.data.AUTOTUNE)
     )
 

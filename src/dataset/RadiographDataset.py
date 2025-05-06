@@ -2,7 +2,6 @@ import os
 import tensorflow as tf
 import pandas as pd
 
-from src.augmentation.DataAugmentation import augment_image
 from src.radiomics.RadiomicsFeature import load_features  # carica un .npy → numpy array
 
 class RadiographDatasetBuilder:
@@ -79,15 +78,9 @@ class RadiographDatasetBuilder:
             age_months.set_shape(())
             age_years.set_shape(())
 
-            if train:
-                img = augment_image(img)
-
             return (img, rad), (age_months, 1)
 
         ds = ds.map(_tf_parse, num_parallel_calls=tf.data.AUTOTUNE)
-
-        if train:
-            ds = ds.shuffle(100)
 
         ds = ds.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
         return ds

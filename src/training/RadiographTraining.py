@@ -21,7 +21,6 @@ def train_model(model, dataset, epochs=30, batch_size=16, validation_data=None):
             num_parallel_calls=tf.data.AUTOTUNE
         )
         .shuffle(100)
-        .cache()
         .prefetch(tf.data.AUTOTUNE)
     )
 
@@ -37,7 +36,6 @@ def train_model(model, dataset, epochs=30, batch_size=16, validation_data=None):
                 num_parallel_calls=tf.data.AUTOTUNE
             )
             .shuffle(100)
-            .cache()
             .prefetch(tf.data.AUTOTUNE)
         )
     else:
