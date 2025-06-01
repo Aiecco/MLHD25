@@ -6,47 +6,17 @@ Bone Age Prediction from Hand X-Rays
 
 
 
-
-
-
-Current models:
+Models:
 
 - Basic benchmark semi-shallow CNN: 22.5 months test error [no training problems]
-- Deep CNN with gender fusion mech [to be trained]
+  ![image](https://github.com/user-attachments/assets/171ff013-e45d-4383-8f69-1b30082d4926)
+
+- Deep CNN with gender fusion mech: 6.02 months test error
+![image](https://github.com/user-attachments/assets/c751f732-4de9-41bf-87cf-dfc24b575882)
+> complex task, reducing lr on plateau is effective for training and does not overfit
 
 
-Ideas:
-        
-    1. Multi-Input CNN
-        process gender as a one-hot encoded vector
-        Concatenate CNN features with the gender vector 
-        
-    OR
-  
-    1. Dual-Stream Gender-Aware Network: one branch for males, one for females (better)
-        Train with shared weights for early layers, but allow separate feature extraction at later stages.
-        Introduce a gender classifier as an auxiliary task to ensure gender-based feature separation.
-        Fusion at the final regression layer.
 
-        
-    2. Temporal regression via RNNs
-         bone growth as a time-series-like problem by extracting sequential features (via CNN)
-         Pass the features through an LSTM or GRU 
-         Predict bone age as a sequence-to-sequence output
-         e.g., predict small increments leading to the final age
-
-         
-    3. Graph-Based (hard)
-         bone keypoint detection (nodes = keypoints, edges = anatomical connections)
-         pass through a GCN for feature extraction
-         finally use a CNN
-
-
-    4. Vision Transformer w patches (very hard)
-        divide the x-ray into anatomically meaningful patches instead of simple square patches (how?)
-        use bone-specific positional embeddings ( growth plate areas with different weights)
-        feed patch embeddings into a ViT
-        combine the ViT output with a CNN-based backbone for final reg
-
-
-    5. CNN with attention?
+To Do:
+- patches processed with RNN + attention
+- cross validation for all models
