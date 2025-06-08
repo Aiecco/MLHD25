@@ -2,111 +2,35 @@ import os.path
 
 import keras
 
-from src.Models.OrdinalRegressor import AgeEstimator
 from src.dataset.RadiographDataset import RadiographDatasetBuilder
 import tensorflow as tf
 
-from src.loss.CoralLoss import coral_loss
-from src.loss.YearLoss import months_mse
-from src.radiomics.RadiomicPreprocess import preprocess_radiomics
-from src.testing.AgePrediction import predict_and_evaluate
-from src.testing.Evaluation import evaluate_age_predictions
-from src.testing.RadiographTesting import test_model
+# from src.plot.PlotImages import display_raw_prep
+from src.preprocessing.PreprocessPipeline import preprocess_pipeline
+from src.testing.EvaluationPipeline import evaluation_pipeline
+from src.testing.evaluate import evaluate_saved_model
 from src.training.RadiographTraining import train_model
-from src.utils.DisplayResults import display_evaluation_results
-from src.utils.LoadModel import load_saved_model
-from src.utils.SaveModel import save_model_properly
+from src.training.training_pipeline import training_pipeline
 
 
-def radiograph_pipeline(preprocess=False, training=False, epochs=30, batch_size=64, loss_ordinal_logits=1, loss_weight_gender=-0.1, loss_weight_month=0.7):
+# from src.training.RadiographTraining import train_model
+
+MODEL_PATH = 'best_age_prediction_model_standalone.keras'
+
+
+def radiograph_pipeline(preprocess=False, training=False, evaluate=False):
     # Estrazione radiomiche
     if preprocess:
-        preprocess_radiomics("data/Train/train_samples", "data/Train/radiomics")
-        preprocess_radiomics("data/Test/test_samples", "data/Test/radiomics")
-        preprocess_radiomics("data/Val/validation_samples", "data/Val/radiomics")
-
-    # Costruisci i dataset
-    train_ds = RadiographDatasetBuilder(
-        base_dir="data/Train",
-        label_csv="train_labels.csv",
-        img_subfolder="train_samples",
-        img_size=(128, 128),
-        batch_size=batch_size
-    ).build(train=True)
-
-    val_ds = RadiographDatasetBuilder(
-        base_dir="data/Val",
-        label_csv="val_labels.csv",
-        img_subfolder="validation_samples",
-        img_size=(128, 128),
-        batch_size=batch_size
-    ).build(train=False)
-
-    test_ds = RadiographDatasetBuilder(
-        base_dir="data/Test",
-        label_csv="test_labels.csv",
-        img_subfolder="test_samples",
-        img_size=(128, 128),
-        batch_size=batch_size
-    ).build(train=False)
-
-    radiomics_dim = 38
-    max_years = 20
-    model = AgeEstimator(input_shape=(128, 128, 1),
-                         radiomics_dim=radiomics_dim,
-                         max_years=max_years)
-
-    # Allena il modello
-    model_graph = model.build_graph()
-    tf.keras.utils.plot_model(model_graph, show_shapes=True)
-
-    # --- Compilazione del Modello ---
-    model_graph.compile(
-        optimizer='adam',
-        loss=tf.keras.losses.MeanSquaredError(),
-        metrics=[months_mse]
-    )
-
-    test_dataset = (
-        test_ds
-        .map(
-            lambda features, labels: (
-                (features[0], features[1]),  # img, radiomics, gender_input
-                (labels[0])  # age_year, age_month, gender
-            ),
-            num_parallel_calls=tf.data.AUTOTUNE
-        )
-        .prefetch(tf.data.AUTOTUNE)
-    )
+        preprocess_pipeline('data/Val/', Val=True)
+        preprocess_pipeline('data/Test/', Test=True, Val=False)
+        preprocess_pipeline('data/Train/', Train=True, Val=False)
 
     if training:
-        trained, age_metrics_callback = train_model(model_graph, train_ds, epochs, batch_size=batch_size, validation_data=val_ds)
-        #trained, age_metrics_callback = train_model_with_monitoring(model_graph, train_ds, batch_size=batch_size, epochs=5, validation_data=val_ds)
+        training_pipeline(base_dir_train='data/Train',
+                          label_train='data/Train/train_labels.csv',
+                          label_val='data/Val/val_labels.csv',
+                          base_dir_val='data/Val'
+                          )
 
-        # Supponiamo che model_graph sia il tuo modello già compilato e addestrato
-        save_path = "out"
-        os.makedirs(save_path, exist_ok=True)
-        #save_model_properly(model_graph, save_path)
-        trained.save("out/age_estimator.keras")
-
-        # Alla fine del training, visualizza l'andamento delle metriche
-        age_metrics_callback.plot_metrics_history()
-
-        # Valuta il modello sul test set con visualizzazioni dettagliate
-        test_results = predict_and_evaluate(model, test_dataset, plot_results=True)
-        print(f"MAE finale (mesi): {test_results['MAE (mesi)']:.2f}")
-
-
-    model_path = "out"
-    # Tenta prima il caricamento diretto
-    loaded_model = load_saved_model(model_path, loss_weight_month, loss_ordinal_logits)
-
-    # Se abbiamo caricato con successo il modello, valutiamolo sul test set
-    if loaded_model is not None:
-        # Valuta il modello
-        results = predict_and_evaluate(loaded_model, test_dataset, plot_results=True)
-
-        # Ora hai tutte le metriche e le visualizzazioni per la discussione dei risultati
-        display_evaluation_results(results)
-    else:
-        print("Impossibile caricare il modello. Verifica i percorsi e le definizioni delle classi personalizzate.")
+    if evaluate:
+        evaluation_pipeline(MODEL_PATH, test_path='data/Test', label_path='data/Test/test_labels.csv')
