@@ -26,7 +26,7 @@ def preprocess_pipeline(folder, Train=False, Test=False, Val=True):
         subdir_output = os.path.join(folder, prep_img_dir)
         preprocess_images(subdir_input, subdir_output)
 
-def preprocess_images(input_path, output_path, output_size=128, augment=False):
+def preprocess_images(input_path, output_path, output_size=256, augment=False):
 
     print(f"Input directory:  {input_path}")
     print(f"Output directory: {output_path}")

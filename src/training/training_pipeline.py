@@ -5,7 +5,7 @@ import tensorflow as tf
 from src.training.RadiographTraining import train_model
 
 
-def training_pipeline(base_dir_train, label_train, label_val, base_dir_val, img_sizes=128):
+def training_pipeline(base_dir_train, label_train, label_val, base_dir_val, img_sizes=256):
     builder_train = RadiographDatasetBuilder(
         base_dir=base_dir_train,
         label_csv=label_train,
@@ -43,7 +43,7 @@ def training_pipeline(base_dir_train, label_train, label_val, base_dir_val, img_
             model_builder.model,          # Passa l'oggetto modello compilato
             train_dataset,                # Dataset di training
             validation_dataset=val_dataset, # Dataset di validazione
-            epochs=10,                     # Numero di epoche ridotto per un test veloce
+            epochs=50,
             model_save_path='best_age_prediction_model_standalone.keras'
         )
         print(f"Training history keys: {history.history.keys()}")

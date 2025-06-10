@@ -11,7 +11,7 @@ def main():
     # test_labels(test_path)
     # val_labels(val_path)
 
-    radiograph_pipeline(preprocess=False, training=True, evaluate=True)
+    radiograph_pipeline(preprocess=False, training=False, evaluate=True)
     # load_structure()
 
 

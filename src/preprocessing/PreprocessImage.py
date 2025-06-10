@@ -81,13 +81,33 @@ def resize(image_gray: np.ndarray, output_size: int = OUTPUT_SIZE) -> np.ndarray
     resized_img = cv2.resize(padded_img, (output_size, output_size), interpolation=cv2.INTER_AREA)
     return resized_img
 
+
 def aug(image: np.ndarray) -> np.ndarray:
-    # random horizontal flip
+    """
+    Applies a set of random augmentations to the image.
+    Includes: horizontal flip, rotations, inversion, brightness, contrast.
+    """
+    # Random horizontal flip
     if random.random() > 0.5:
         image = cv2.flip(image, 1)
 
-    # random 90/180/270 deg rotation
+    # Random 90/180/270 deg rotation
     rot_code = random.choice([None, cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE])
     if rot_code is not None:
         image = cv2.rotate(image, rot_code)
+
+    # Random inversion (negative image)
+    if random.random() > 0.5:
+        image = 255 - image  # Invert pixel values for 8-bit grayscale
+
+    # Random brightness adjustment
+    if random.random() > 0.5:
+        alpha = random.uniform(0.7, 1.3)  # Factor for brightness (1.0 is no change)
+        image = cv2.convertScaleAbs(image, alpha=alpha, beta=0)
+
+    # Random contrast adjustment
+    if random.random() > 0.5:
+        alpha = random.uniform(0.7, 1.3)  # Factor for contrast
+        image = cv2.convertScaleAbs(image, alpha=alpha, beta=0)
+
     return image

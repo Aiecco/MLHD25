@@ -8,7 +8,7 @@ from src.dataset.RadiographDataset import RadiographDatasetBuilder
 
 
 # --- Funzione di Valutazione per Modello Salvato ---
-def evaluate_saved_model(model_path, test_dataset_path, label_test_dataset_path, img_sizes=128):
+def evaluate_saved_model(model_path, test_dataset_path, label_test_dataset_path, img_sizes=256):
     """
     Carica un modello Keras salvato, lo valuta su un dataset di test e raccoglie
     le predizioni e le etichette vere.

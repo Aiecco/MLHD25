@@ -1,0 +1,320 @@
+C:\Python311\python.exe C:\Users\ecapo\Desktop\MLHD25\main.py 
+2025-06-08 19:54:12.028673: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2025-06-08 19:54:13.686492: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2025-06-08 19:54:21.054071: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+Train dataset size (batches): 754
+Validation dataset size (batches): 86
+WARNING:tensorflow:From C:\Python311\Lib\site-packages\keras\src\backend\tensorflow\core.py:232: The name tf.placeholder is deprecated. Please use tf.compat.v1.placeholder instead.
+
+
+Model Summary:
+Model: "AgePredictionModel"
+┌─────────────────────────────────┬────────────────────────┬───────────────┐
+│ Layer (type)                    │ Output Shape           │       Param # │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_input (InputLayer)         │ (None, 256, 256, 1)    │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_conv1a (Conv2D)            │ (None, 256, 256, 32)   │           320 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_bn1a (BatchNormalization)  │ (None, 256, 256, 32)   │           128 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_relu1a (Activation)        │ (None, 256, 256, 32)   │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_conv1b (Conv2D)            │ (None, 256, 256, 32)   │         9,248 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_bn1b (BatchNormalization)  │ (None, 256, 256, 32)   │           128 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_relu1b (Activation)        │ (None, 256, 256, 32)   │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_pool1 (MaxPooling2D)       │ (None, 128, 128, 32)   │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_conv2a (Conv2D)            │ (None, 128, 128, 64)   │        18,496 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_bn2a (BatchNormalization)  │ (None, 128, 128, 64)   │           256 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_relu2a (Activation)        │ (None, 128, 128, 64)   │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_conv2b (Conv2D)            │ (None, 128, 128, 64)   │        36,928 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_bn2b (BatchNormalization)  │ (None, 128, 128, 64)   │           256 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_relu2b (Activation)        │ (None, 128, 128, 64)   │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_pool2 (MaxPooling2D)       │ (None, 64, 64, 64)     │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_conv3a (Conv2D)            │ (None, 64, 64, 128)    │        73,856 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_bn3a (BatchNormalization)  │ (None, 64, 64, 128)    │           512 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_relu3a (Activation)        │ (None, 64, 64, 128)    │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_conv3b (Conv2D)            │ (None, 64, 64, 128)    │       147,584 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_bn3b (BatchNormalization)  │ (None, 64, 64, 128)    │           512 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_relu3b (Activation)        │ (None, 64, 64, 128)    │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_pool3 (MaxPooling2D)       │ (None, 32, 32, 128)    │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_conv4a (Conv2D)            │ (None, 32, 32, 256)    │       295,168 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_bn4a (BatchNormalization)  │ (None, 32, 32, 256)    │         1,024 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_relu4a (Activation)        │ (None, 32, 32, 256)    │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_conv4b (Conv2D)            │ (None, 32, 32, 256)    │       590,080 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_bn4b (BatchNormalization)  │ (None, 32, 32, 256)    │         1,024 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_relu4b (Activation)        │ (None, 32, 32, 256)    │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ prep_pool4 (MaxPooling2D)       │ (None, 16, 16, 256)    │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ conv5a (Conv2D)                 │ (None, 16, 16, 256)    │       590,080 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ bn5a (BatchNormalization)       │ (None, 16, 16, 256)    │         1,024 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ relu5a (Activation)             │ (None, 16, 16, 256)    │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ conv5b (Conv2D)                 │ (None, 16, 16, 256)    │       590,080 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ bn5b (BatchNormalization)       │ (None, 16, 16, 256)    │         1,024 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ relu5b (Activation)             │ (None, 16, 16, 256)    │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ pool5 (MaxPooling2D)            │ (None, 8, 8, 256)      │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ attention_prep                  │ (None, 8, 8, 256)      │         3,200 │
+│ (SpatialAttention)              │                        │               │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ flatten_features (Flatten)      │ (None, 16384)          │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ dense1 (Dense)                  │ (None, 512)            │     8,389,120 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ bn_dense1 (BatchNormalization)  │ (None, 512)            │         2,048 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ dropout1 (Dropout)              │ (None, 512)            │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ dense2 (Dense)                  │ (None, 256)            │       131,328 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ bn_dense2 (BatchNormalization)  │ (None, 256)            │         1,024 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ dropout2 (Dropout)              │ (None, 256)            │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ dense3 (Dense)                  │ (None, 128)            │        32,896 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ bn_dense3 (BatchNormalization)  │ (None, 128)            │           512 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ dropout3 (Dropout)              │ (None, 128)            │             0 │
+├─────────────────────────────────┼────────────────────────┼───────────────┤
+│ age_output (Dense)              │ (None, 1)              │           129 │
+└─────────────────────────────────┴────────────────────────┴───────────────┘
+ Total params: 10,917,985 (41.65 MB)
+ Trainable params: 10,913,249 (41.63 MB)
+ Non-trainable params: 4,736 (18.50 KB)
+
+Avvio dell'addestramento:
+
+Avvio dell'addestramento del modello per 50 epoche...
+Epoch 1/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 124.0564 - mae: 123.8191
+Epoch 1: val_mae improved from inf to 44.92442, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 4165s 6s/step - loss: 124.0490 - mae: 123.8117 - val_loss: 45.1994 - val_mae: 44.9244 - learning_rate: 5.0000e-04
+Epoch 2/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 6s/step - loss: 80.0328 - mae: 79.7396
+Epoch 2: val_mae did not improve from 44.92442
+754/754 ━━━━━━━━━━━━━━━━━━━━ 4500s 6s/step - loss: 80.0111 - mae: 79.7178 - val_loss: 75.7117 - val_mae: 75.3485 - learning_rate: 5.0000e-04
+Epoch 3/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 6s/step - loss: 35.1921 - mae: 34.8054
+Epoch 3: val_mae improved from 44.92442 to 33.19063, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 4650s 6s/step - loss: 35.1909 - mae: 34.8041 - val_loss: 33.6271 - val_mae: 33.1906 - learning_rate: 5.0000e-04
+Epoch 4/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 6s/step - loss: 31.1366 - mae: 30.6884
+Epoch 4: val_mae improved from 33.19063 to 27.01086, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 4388s 6s/step - loss: 31.1350 - mae: 30.6868 - val_loss: 27.4860 - val_mae: 27.0109 - learning_rate: 5.0000e-04
+Epoch 5/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 27.5382 - mae: 27.0582
+Epoch 5: val_mae improved from 27.01086 to 25.37876, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3412s 5s/step - loss: 27.5378 - mae: 27.0577 - val_loss: 25.8710 - val_mae: 25.3788 - learning_rate: 5.0000e-04
+Epoch 6/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 25.7964 - mae: 25.3011
+Epoch 6: val_mae did not improve from 25.37876
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3260s 4s/step - loss: 25.7962 - mae: 25.3009 - val_loss: 31.2345 - val_mae: 30.7267 - learning_rate: 5.0000e-04
+Epoch 7/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 25.3734 - mae: 24.8574
+Epoch 7: val_mae did not improve from 25.37876
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3251s 4s/step - loss: 25.3732 - mae: 24.8572 - val_loss: 26.0039 - val_mae: 25.4781 - learning_rate: 5.0000e-04
+Epoch 8/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 24.1276 - mae: 23.5958
+Epoch 8: val_mae improved from 25.37876 to 23.72152, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3263s 4s/step - loss: 24.1279 - mae: 23.5960 - val_loss: 24.2686 - val_mae: 23.7215 - learning_rate: 5.0000e-04
+Epoch 9/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 23.6724 - mae: 23.1250
+Epoch 9: val_mae did not improve from 23.72152
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3266s 4s/step - loss: 23.6727 - mae: 23.1253 - val_loss: 24.3521 - val_mae: 23.7968 - learning_rate: 5.0000e-04
+Epoch 10/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 23.7200 - mae: 23.1647
+Epoch 10: val_mae improved from 23.72152 to 21.17952, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3261s 4s/step - loss: 23.7194 - mae: 23.1642 - val_loss: 21.7354 - val_mae: 21.1795 - learning_rate: 5.0000e-04
+Epoch 11/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 22.9782 - mae: 22.4201
+Epoch 11: val_mae did not improve from 21.17952
+754/754 ━━━━━━━━━━━━━━━━━━━━ 6208s 4s/step - loss: 22.9787 - mae: 22.4206 - val_loss: 37.6091 - val_mae: 37.0323 - learning_rate: 5.0000e-04
+Epoch 12/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 23.1445 - mae: 22.5634
+Epoch 12: val_mae improved from 21.17952 to 20.42710, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3372s 4s/step - loss: 23.1440 - mae: 22.5629 - val_loss: 21.0077 - val_mae: 20.4271 - learning_rate: 5.0000e-04
+Epoch 13/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 22.0301 - mae: 21.4470
+Epoch 13: val_mae did not improve from 20.42710
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3285s 4s/step - loss: 22.0304 - mae: 21.4473 - val_loss: 38.4395 - val_mae: 37.8447 - learning_rate: 5.0000e-04
+Epoch 14/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 22.0180 - mae: 21.4204
+Epoch 14: val_mae did not improve from 20.42710
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3302s 4s/step - loss: 22.0178 - mae: 21.4202 - val_loss: 21.3842 - val_mae: 20.7953 - learning_rate: 5.0000e-04
+Epoch 15/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 21.5152 - mae: 20.9295
+Epoch 15: val_mae improved from 20.42710 to 20.31838, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3322s 4s/step - loss: 21.5149 - mae: 20.9292 - val_loss: 20.9034 - val_mae: 20.3184 - learning_rate: 5.0000e-04
+Epoch 16/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 21.1313 - mae: 20.5494
+Epoch 16: val_mae improved from 20.31838 to 16.71929, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3414s 5s/step - loss: 21.1312 - mae: 20.5493 - val_loss: 17.2989 - val_mae: 16.7193 - learning_rate: 5.0000e-04
+Epoch 17/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 20.6930 - mae: 20.1145
+Epoch 17: val_mae did not improve from 16.71929
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3466s 5s/step - loss: 20.6930 - mae: 20.1146 - val_loss: 17.8706 - val_mae: 17.2943 - learning_rate: 5.0000e-04
+Epoch 18/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 20.2006 - mae: 19.6280
+Epoch 18: val_mae did not improve from 16.71929
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3378s 4s/step - loss: 20.2007 - mae: 19.6280 - val_loss: 28.6058 - val_mae: 28.0334 - learning_rate: 5.0000e-04
+Epoch 19/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 7s/step - loss: 20.3066 - mae: 19.7314
+Epoch 19: val_mae did not improve from 16.71929
+754/754 ━━━━━━━━━━━━━━━━━━━━ 5170s 7s/step - loss: 20.3067 - mae: 19.7315 - val_loss: 19.4400 - val_mae: 18.8633 - learning_rate: 5.0000e-04
+Epoch 20/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 19.6608 - mae: 19.0881
+Epoch 20: val_mae did not improve from 16.71929
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3792s 5s/step - loss: 19.6607 - mae: 19.0880 - val_loss: 24.1979 - val_mae: 23.6281 - learning_rate: 5.0000e-04
+Epoch 21/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 19.9753 - mae: 19.4064
+Epoch 21: val_mae did not improve from 16.71929
+
+Epoch 21: ReduceLROnPlateau reducing learning rate to 0.0002500000118743628.
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3941s 5s/step - loss: 19.9754 - mae: 19.4065 - val_loss: 17.5463 - val_mae: 16.9757 - learning_rate: 5.0000e-04
+Epoch 22/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 19.5503 - mae: 18.9841
+Epoch 22: val_mae improved from 16.71929 to 15.59630, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3763s 5s/step - loss: 19.5499 - mae: 18.9837 - val_loss: 16.1485 - val_mae: 15.5963 - learning_rate: 2.5000e-04
+Epoch 23/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 18.3920 - mae: 17.8444
+Epoch 23: val_mae did not improve from 15.59630
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3886s 5s/step - loss: 18.3921 - mae: 17.8446 - val_loss: 17.7673 - val_mae: 17.2327 - learning_rate: 2.5000e-04
+Epoch 24/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 18.5481 - mae: 18.0159
+Epoch 24: val_mae did not improve from 15.59630
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3803s 5s/step - loss: 18.5480 - mae: 18.0158 - val_loss: 16.2282 - val_mae: 15.7040 - learning_rate: 2.5000e-04
+Epoch 25/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 18.0727 - mae: 17.5514
+Epoch 25: val_mae improved from 15.59630 to 15.32660, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3279s 4s/step - loss: 18.0728 - mae: 17.5515 - val_loss: 15.8370 - val_mae: 15.3266 - learning_rate: 2.5000e-04
+Epoch 26/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 17.7708 - mae: 17.2617
+Epoch 26: val_mae did not improve from 15.32660
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3307s 4s/step - loss: 17.7710 - mae: 17.2619 - val_loss: 15.9799 - val_mae: 15.4771 - learning_rate: 2.5000e-04
+Epoch 27/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 17.3710 - mae: 16.8707
+Epoch 27: val_mae did not improve from 15.32660
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3323s 4s/step - loss: 17.3713 - mae: 16.8710 - val_loss: 22.2339 - val_mae: 21.7397 - learning_rate: 2.5000e-04
+Epoch 28/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 17.7841 - mae: 17.2911
+Epoch 28: val_mae did not improve from 15.32660
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3293s 4s/step - loss: 17.7841 - mae: 17.2910 - val_loss: 16.8961 - val_mae: 16.4066 - learning_rate: 2.5000e-04
+Epoch 29/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 17.5626 - mae: 17.0743
+Epoch 29: val_mae improved from 15.32660 to 15.11036, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3314s 4s/step - loss: 17.5622 - mae: 17.0738 - val_loss: 15.5951 - val_mae: 15.1104 - learning_rate: 2.5000e-04
+Epoch 30/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 17.7315 - mae: 17.2449
+Epoch 30: val_mae did not improve from 15.11036
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3300s 4s/step - loss: 17.7313 - mae: 17.2446 - val_loss: 20.1166 - val_mae: 19.6310 - learning_rate: 2.5000e-04
+Epoch 31/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 17.4152 - mae: 16.9301
+Epoch 31: val_mae did not improve from 15.11036
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3381s 4s/step - loss: 17.4151 - mae: 16.9300 - val_loss: 18.9427 - val_mae: 18.4611 - learning_rate: 2.5000e-04
+Epoch 32/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 16.6188 - mae: 16.1380
+Epoch 32: val_mae did not improve from 15.11036
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3288s 4s/step - loss: 16.6192 - mae: 16.1384 - val_loss: 19.6238 - val_mae: 19.1444 - learning_rate: 2.5000e-04
+Epoch 33/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 16.5526 - mae: 16.0732
+Epoch 33: val_mae did not improve from 15.11036
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3295s 4s/step - loss: 16.5526 - mae: 16.0732 - val_loss: 16.1548 - val_mae: 15.6768 - learning_rate: 2.5000e-04
+Epoch 34/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 16.5872 - mae: 16.1090
+Epoch 34: val_mae did not improve from 15.11036
+
+Epoch 34: ReduceLROnPlateau reducing learning rate to 0.0001250000059371814.
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3306s 4s/step - loss: 16.5873 - mae: 16.1091 - val_loss: 16.7355 - val_mae: 16.2563 - learning_rate: 2.5000e-04
+Epoch 35/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 16.0761 - mae: 15.5979
+Epoch 35: val_mae improved from 15.11036 to 14.70982, saving model to best_age_prediction_model_standalone.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3293s 4s/step - loss: 16.0763 - mae: 15.5981 - val_loss: 15.1838 - val_mae: 14.7098 - learning_rate: 1.2500e-04
+Epoch 36/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 15.8983 - mae: 15.4255
+Epoch 36: val_mae did not improve from 14.70982
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3347s 4s/step - loss: 15.8982 - mae: 15.4254 - val_loss: 15.5996 - val_mae: 15.1313 - learning_rate: 1.2500e-04
+Epoch 37/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 15.7719 - mae: 15.3050
+Epoch 37: val_mae did not improve from 14.70982
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3289s 4s/step - loss: 15.7717 - mae: 15.3048 - val_loss: 15.6182 - val_mae: 15.1550 - learning_rate: 1.2500e-04
+Epoch 38/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 15.2671 - mae: 14.8047
+Epoch 38: val_mae did not improve from 14.70982
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3306s 4s/step - loss: 15.2672 - mae: 14.8048 - val_loss: 16.9689 - val_mae: 16.5092 - learning_rate: 1.2500e-04
+Epoch 39/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 15.2432 - mae: 14.7842
+Epoch 39: val_mae did not improve from 14.70982
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3357s 4s/step - loss: 15.2434 - mae: 14.7845 - val_loss: 16.1996 - val_mae: 15.7432 - learning_rate: 1.2500e-04
+Epoch 40/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 6s/step - loss: 15.2196 - mae: 14.7642
+Epoch 40: val_mae did not improve from 14.70982
+
+Epoch 40: ReduceLROnPlateau reducing learning rate to 6.25000029685907e-05.
+754/754 ━━━━━━━━━━━━━━━━━━━━ 4614s 6s/step - loss: 15.2197 - mae: 14.7644 - val_loss: 15.5156 - val_mae: 15.0628 - learning_rate: 1.2500e-04
+Epoch 41/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 14.9272 - mae: 14.4752
+Epoch 41: val_mae did not improve from 14.70982
+754/754 ━━━━━━━━━━━━━━━━━━━━ 4122s 5s/step - loss: 14.9273 - mae: 14.4753 - val_loss: 15.4687 - val_mae: 15.0190 - learning_rate: 6.2500e-05
+Epoch 42/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 6s/step - loss: 14.6092 - mae: 14.1604
+Epoch 42: val_mae did not improve from 14.70982
+754/754 ━━━━━━━━━━━━━━━━━━━━ 4372s 6s/step - loss: 14.6096 - mae: 14.1608 - val_loss: 15.4622 - val_mae: 15.0157 - learning_rate: 6.2500e-05
+Epoch 43/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 14.7330 - mae: 14.2872
+Epoch 43: val_mae did not improve from 14.70982
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3507s 5s/step - loss: 14.7331 - mae: 14.2874 - val_loss: 16.7260 - val_mae: 16.2828 - learning_rate: 6.2500e-05
+Epoch 44/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 6s/step - loss: 14.6706 - mae: 14.2281
+Epoch 44: val_mae did not improve from 14.70982
+754/754 ━━━━━━━━━━━━━━━━━━━━ 4768s 6s/step - loss: 14.6705 - mae: 14.2280 - val_loss: 15.3735 - val_mae: 14.9327 - learning_rate: 6.2500e-05
+Epoch 45/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 14.4097 - mae: 13.9696
+Epoch 45: val_mae did not improve from 14.70982
+
+Epoch 45: ReduceLROnPlateau reducing learning rate to 3.125000148429535e-05.
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3707s 5s/step - loss: 14.4099 - mae: 13.9698 - val_loss: 15.5439 - val_mae: 15.1059 - learning_rate: 6.2500e-05
+Epoch 45: early stopping
+Restoring model weights from the end of the best epoch: 35.
+
+Addestramento del modello completato.
+Training history keys: dict_keys(['loss', 'mae', 'val_loss', 'val_mae', 'learning_rate'])
+Il modello è stato addestrato e salvato in 'best_age_prediction_model_standalone.keras'.
+
+--- Valutazione del modello salvato e generazione grafici ---
+Caricamento del modello da: best_age_prediction_model_standalone.keras
+
+Modello caricato con successo.
+
+Valutazione e raccolta predizioni sul Test Set:
