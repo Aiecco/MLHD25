@@ -317,4 +317,8 @@ Caricamento del modello da: best_age_prediction_model_standalone.keras
 
 Modello caricato con successo.
 
-Valutazione e raccolta predizioni sul Test Set:
+Valutazione e raccolta predizioni sul Test Set
+Risultati della valutazione:
+loss: 17.3349
+compile_metrics: 16.8609
+Grafici di valutazione generati e salvati come 'age_prediction_analysis.png'.
