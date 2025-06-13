@@ -322,3 +322,71 @@ Risultati della valutazione:
 loss: 17.3349
 compile_metrics: 16.8609
 Grafici di valutazione generati e salvati come 'age_prediction_analysis.png'.
+
+Avvio dell'addestramento del modello per 50 epoche...
+Epoch 1/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 18.0601 - mae: 17.5868
+Epoch 1: val_mae improved from inf to 15.15118, saving model to best_age_prediction_model_retrained.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3569s 5s/step - loss: 18.0590 - mae: 17.5857 - val_loss: 15.6211 - val_mae: 15.1512 - learning_rate: 1.2500e-04
+Epoch 2/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 16.4711 - mae: 16.0023
+Epoch 2: val_mae did not improve from 15.15118
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3668s 5s/step - loss: 16.4712 - mae: 16.0024 - val_loss: 15.6280 - val_mae: 15.1616 - learning_rate: 1.2500e-04
+Epoch 3/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 16.1552 - mae: 15.6899
+Epoch 3: val_mae improved from 15.15118 to 14.79594, saving model to best_age_prediction_model_retrained.keras
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3579s 5s/step - loss: 16.1551 - mae: 15.6898 - val_loss: 15.2584 - val_mae: 14.7959 - learning_rate: 1.2500e-04
+Epoch 4/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 15.5048 - mae: 15.0434
+Epoch 4: val_mae did not improve from 14.79594
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3601s 5s/step - loss: 15.5050 - mae: 15.0437 - val_loss: 15.3151 - val_mae: 14.8564 - learning_rate: 1.2500e-04
+Epoch 5/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 15.5634 - mae: 15.1054
+Epoch 5: val_mae did not improve from 14.79594
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3537s 5s/step - loss: 15.5632 - mae: 15.1052 - val_loss: 16.9039 - val_mae: 16.4483 - learning_rate: 1.2500e-04
+Epoch 6/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 15.3306 - mae: 14.8759
+Epoch 6: val_mae did not improve from 14.79594
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3385s 4s/step - loss: 15.3308 - mae: 14.8761 - val_loss: 15.8812 - val_mae: 15.4290 - learning_rate: 1.2500e-04
+Epoch 7/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 15.1583 - mae: 14.7069
+Epoch 7: val_mae did not improve from 14.79594
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3326s 4s/step - loss: 15.1585 - mae: 14.7071 - val_loss: 16.0757 - val_mae: 15.6267 - learning_rate: 1.2500e-04
+Epoch 8/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 15.1390 - mae: 14.6905
+Epoch 8: val_mae did not improve from 14.79594
+
+Epoch 8: ReduceLROnPlateau reducing learning rate to 6.25000029685907e-05.
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3338s 4s/step - loss: 15.1392 - mae: 14.6907 - val_loss: 15.7793 - val_mae: 15.3320 - learning_rate: 1.2500e-04
+Epoch 9/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 14.8620 - mae: 14.4155
+Epoch 9: val_mae did not improve from 14.79594
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3382s 4s/step - loss: 14.8618 - mae: 14.4153 - val_loss: 15.6793 - val_mae: 15.2347 - learning_rate: 6.2500e-05
+Epoch 10/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 14.4744 - mae: 14.0302
+Epoch 10: val_mae did not improve from 14.79594
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3397s 5s/step - loss: 14.4747 - mae: 14.0306 - val_loss: 15.4890 - val_mae: 15.0465 - learning_rate: 6.2500e-05
+Epoch 11/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 4s/step - loss: 14.6149 - mae: 14.1728
+Epoch 11: val_mae did not improve from 14.79594
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3389s 4s/step - loss: 14.6150 - mae: 14.1729 - val_loss: 15.6812 - val_mae: 15.2408 - learning_rate: 6.2500e-05
+Epoch 12/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 5s/step - loss: 14.6435 - mae: 14.2038
+Epoch 12: val_mae did not improve from 14.79594
+754/754 ━━━━━━━━━━━━━━━━━━━━ 3788s 5s/step - loss: 14.6438 - mae: 14.2041 - val_loss: 15.9907 - val_mae: 15.5529 - learning_rate: 6.2500e-05
+Epoch 13/50
+754/754 ━━━━━━━━━━━━━━━━━━━━ 0s 7s/step - loss: 14.5847 - mae: 14.1473
+Epoch 13: val_mae did not improve from 14.79594
+
+Epoch 13: ReduceLROnPlateau reducing learning rate to 3.125000148429535e-05.
+754/754 ━━━━━━━━━━━━━━━━━━━━ 5475s 7s/step - loss: 14.5849 - mae: 14.1476 - val_loss: 15.5771 - val_mae: 15.1414 - learning_rate: 6.2500e-05
+Epoch 13: early stopping
+Restoring model weights from the end of the best epoch: 3.
+
+Addestramento del modello completato.
+
+Grafici della cronologia di training salvati come 'training_history_plots.png'.
+Training history keys: dict_keys(['loss', 'mae', 'val_loss', 'val_mae', 'learning_rate'])
+Il modello è stato addestrato e salvato in 'best_age_prediction_model_retrained.keras'.
+
+--- Valutazione del modello salvato e generazione grafici ---
