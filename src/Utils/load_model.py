@@ -6,7 +6,6 @@ from typing import Optional  # Import for Optional type hint
 # Assuming correct import path for your custom AttentionLayer
 from src.Models.AttentionLayer import SpatialAttention
 
-
 def load_trained_model(model_save_path: str) -> Optional[keras.Model]:
     """
     Attempts to load a pre-trained Keras model from a specified path.
