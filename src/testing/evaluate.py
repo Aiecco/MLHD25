@@ -71,7 +71,7 @@ def evaluate_saved_model(model_path: str,
     )
     # Build the TensorFlow Dataset for testing. `shuffle=False` ensures consistent order.
     test_dataset = builder_test.build(
-        shuffle=False)  # Do not shuffle the test set.
+        train=False)  # Do not shuffle the test set.
 
     print(f"\nLoading model from: {model_path}")
     try:
@@ -122,7 +122,7 @@ def evaluate_saved_model(model_path: str,
     # Perform a formal evaluation of the model on the entire test dataset.
     # It's important to build the test_dataset again or ensure its iterator is reset
     # if it has already been consumed by the `unbatch()` loop, to get a full evaluation.
-    test_dataset_for_eval = builder_test.build(shuffle=False)  # Rebuild to ensure full evaluation
+    test_dataset_for_eval = builder_test.build(train=False)  # Rebuild to ensure full evaluation
     results = loaded_model.evaluate(test_dataset_for_eval, verbose=0)
 
     print("Evaluation Results:")
