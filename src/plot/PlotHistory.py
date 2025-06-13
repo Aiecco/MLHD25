@@ -2,18 +2,18 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
-from keras.callbacks import History # Per tipo hinting
+from keras.callbacks import History # For type hinting
 
 def plot_training_history(history: History, save_path: str = 'training_history_plots.png'):
     """
-    Genera e salva i plot della loss e MAE del training e validation history.
+    Generates and saves plots of the loss and MAE from the training and validation history.
 
     Args:
-        history (tf.keras.callbacks.History): L'oggetto History restituito da model.fit().
-        save_path (str): Il percorso completo dove salvare il grafico.
+        history (tf.keras.callbacks.History): The History object returned by model.fit().
+        save_path (str): The full path where the plot will be saved.
     """
     if not isinstance(history, History):
-        print("Errore: 'history' deve essere un'istanza di tf.keras.callbacks.History.")
+        print("Error: 'history' must be an instance of tf.keras.callbacks.History.")
         return
 
     hist = history.history
@@ -21,29 +21,29 @@ def plot_training_history(history: History, save_path: str = 'training_history_p
 
     plt.figure(figsize=(15, 6))
 
-    # Plot della Loss
+    # Plot of Loss
     plt.subplot(1, 2, 1)
-    plt.plot(epochs, hist['loss'], label='Loss di Training')
+    plt.plot(epochs, hist['loss'], label='Training Loss')
     if 'val_loss' in hist:
-        plt.plot(epochs, hist['val_loss'], label='Loss di Validazione')
-    plt.title('Curva di Loss durante il Training')
-    plt.xlabel('Epoca')
+        plt.plot(epochs, hist['val_loss'], label='Validation Loss')
+    plt.title('Loss Curve During Training')
+    plt.xlabel('Epoch')
     plt.ylabel('Loss (MAE)')
     plt.legend()
     plt.grid(True)
 
-    # Plot della MAE
+    # Plot of MAE
     plt.subplot(1, 2, 2)
-    plt.plot(epochs, hist['mae'], label='MAE di Training')
+    plt.plot(epochs, hist['mae'], label='Training MAE')
     if 'val_mae' in hist:
-        plt.plot(epochs, hist['val_mae'], label='MAE di Validazione')
-    plt.title('Curva di MAE durante il Training')
-    plt.xlabel('Epoca')
-    plt.ylabel('MAE (Mesi)')
+        plt.plot(epochs, hist['val_mae'], label='Validation MAE')
+    plt.title('MAE Curve During Training')
+    plt.xlabel('Epoch')
+    plt.ylabel('MAE (Months)')
     plt.legend()
     plt.grid(True)
 
     plt.tight_layout()
     plt.savefig(save_path, dpi=300)
-    print(f"\nGrafici della cronologia di training salvati come '{save_path}'.")
-    plt.show() # Mostra il plot
+    print(f"\nTraining history plots saved as '{save_path}'.")
+    plt.show() # Display the plot

@@ -1,6 +1,5 @@
 from src.pipelines.RadiographPipeline import radiograph_pipeline
 
-
 def main():
     train_path = 'data/Train/train_labels.csv'
     test_path = 'data/Test/test_labels.csv'

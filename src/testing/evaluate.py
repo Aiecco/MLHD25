@@ -9,7 +9,6 @@ from src.Models.AttentionLayer import SpatialAttention  # Custom attention layer
 from src.dataset.RadiographDataset import RadiographDatasetBuilder  # Dataset builder utility
 from src.preprocessing.PreprocessImage import calculate_mean_std  # Utility to calculate mean/std for standardization
 
-
 def evaluate_saved_model(model_path: str,
                          test_base_dir: str,
                          label_test_dataset_path: str,

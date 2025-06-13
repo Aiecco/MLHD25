@@ -1,7 +1,6 @@
 from keras import layers
 import tensorflow as tf
 
-
 class SpatialAttention(layers.Layer):
     """
     A custom Keras layer implementing a more attentive spatial attention mechanism.

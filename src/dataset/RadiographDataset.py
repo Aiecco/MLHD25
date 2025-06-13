@@ -4,7 +4,7 @@ import tensorflow as tf
 import pandas as pd
 
 
-# --- RadiographDatasetBuilder (Adjusted) ---
+# --- RadiographDatasetBuilder ---
 class RadiographDatasetBuilder:
     """
     Builds a TensorFlow Dataset for radiograph images, handling raw and
@@ -85,12 +85,10 @@ class RadiographDatasetBuilder:
         # Convert to float32 BEFORE standardization
         prep_img = tf.cast(prep_img, tf.float32)
 
-        # --- APPLICA STANDARDizzazione (media/dev_std) ---
-        # Aggiungi un piccolo epsilon per prevenire divisione per zero se std_pixel_value è 0
+        # standardization
         std_val_safe = self.std_pixel_value if self.std_pixel_value > 1e-7 else 1.0
 
         prep_img = (prep_img - self.mean_pixel_value) / std_val_safe
-        # --- FINE STANDARDizzazione ---
 
         # Get age from map, handling potential comma decimal separator
         try:

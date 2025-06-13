@@ -9,7 +9,6 @@ from keras import models  # Keras models module for loading saved models
 
 from src.testing.evaluate import evaluate_saved_model
 
-
 def evaluation_pipeline(model_save_path: str,
                         test_path: str,
                         label_path: str,

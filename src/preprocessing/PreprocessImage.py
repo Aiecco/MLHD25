@@ -28,7 +28,6 @@ float: Minimum contour area as a factor of the total image area.
        to filter out small artifacts.
 """
 
-
 # --- Functions ---
 def apply_clahe(image_gray: np.ndarray) -> np.ndarray:
     """

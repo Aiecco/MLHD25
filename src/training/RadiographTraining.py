@@ -2,6 +2,7 @@ import tensorflow as tf
 from keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
 from typing import Optional, Tuple  # Import for type hinting
 
+
 def train_model(model: tf.keras.Model,
                 train_dataset: tf.data.Dataset,
                 epochs: int = 50,

@@ -24,7 +24,6 @@ int: The target size (height and width) in pixels for preprocessed images.
      Images will be resized to (TARGET_IMG_SIZE, TARGET_IMG_SIZE).
 """
 
-
 def radiograph_pipeline(preprocess: bool = False, training: bool = False, evaluate: bool = False):
     """
     Main pipeline orchestrator for bone age assessment from radiographs.

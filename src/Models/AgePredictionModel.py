@@ -4,7 +4,6 @@ from keras import layers, regularizers, models
 from src.Models.AttentionLayer import \
     SpatialAttention  # Assuming this import path is correct and SpatialAttention is defined elsewhere
 
-
 # --- Age Prediction Model with Attention ---
 class AgePredictionModel:
     """

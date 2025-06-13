@@ -17,7 +17,6 @@ train_sample_dir = 'train_samples'
 prep_img_dir = 'prep_images'
 """str: Subdirectory name where preprocessed images will be saved."""
 
-
 def preprocess_pipeline(folder: str, Train: bool = False, Test: bool = False, Val: bool = True):
     """
     Orchestrates the preprocessing of image datasets based on the specified set type.
