@@ -2,25 +2,25 @@ import os
 
 import numpy as np
 import tensorflow as tf
-from keras import models  # Keras models module for loading saved models
-from typing import Tuple, List, Optional  # Imports for type hinting
+from keras import models
+from typing import Tuple, List, Optional
 
-from src.Models.AttentionLayer import SpatialAttention  # Custom attention layer definition
-from src.dataset.RadiographDataset import RadiographDatasetBuilder  # Dataset builder utility
-from src.preprocessing.PreprocessImage import calculate_mean_std  # Utility to calculate mean/std for standardization
+from src.Models.AttentionLayer import SpatialAttention
+from src.dataset.RadiographDataset import RadiographDatasetBuilder
+# from src.preprocessing.PreprocessImage import calculate_mean_std # No longer directly called here for mean/std
+# Import the orchestrating function for interpretability
+from src.interpretability.model_interpretability import run_all_interpretability_plots
 
 def evaluate_saved_model(model_path: str,
                          test_base_dir: str,
                          label_test_dataset_path: str,
+                         mean_pixel_value: float,  # Mean from training set
+                         std_pixel_value: float,   # Std from training set
                          img_sizes: int = 256) -> Tuple[
     Optional[List[float]], Optional[np.ndarray], Optional[np.ndarray]]:
     """
-    Loads a saved Keras model, evaluates it on a test dataset, and collects
-    the true labels and corresponding predictions.
-
-    This function is responsible for ensuring the test data is preprocessed
-    consistently with the training data (e.g., using the same mean and
-    standard deviation for standardization).
+    Loads a saved Keras model, evaluates it on a test dataset, collects
+    the true labels and corresponding predictions, and performs interpretability visualizations.
 
     Args:
         model_path (str): The file path to the saved Keras model
@@ -31,6 +31,10 @@ def evaluate_saved_model(model_path: str,
         label_test_dataset_path (str): The filename of the CSV file containing
                                        ground truth labels for the test set,
                                        relative to `test_base_dir`.
+        mean_pixel_value (float): The mean pixel value calculated from the TRAINING dataset,
+                                  used for standardizing image data. Crucial for consistency.
+        std_pixel_value (float): The standard deviation pixel value calculated from the TRAINING dataset,
+                                 used for standardizing image data. Crucial for consistency.
         img_sizes (int, optional): The target square dimension (height and width)
                                    for input images. This must match the size
                                    used during model training and preprocessing.
@@ -45,33 +49,19 @@ def evaluate_saved_model(model_path: str,
             - pred_months (Optional[np.ndarray]): A NumPy array of predicted bone ages in months.
                                                   Returns None if the model cannot be loaded or evaluated.
     """
-    # Calculate mean and standard deviation from the preprocessed test images.
-    # NOTE: It's crucial for consistency that these values (`mean_val`, `std_val`)
-    # are derived from the TRAINING set and passed into this function, rather
-    # than being recalculated on the test set. Recalculating on the test set
-    # can lead to data leakage or inconsistency if the test set's distribution
-    # is different from the training set's.
-    # For a proper setup, `mean_pixel_value` and `std_pixel_value` should be
-    # parameters of this function, derived from the training set.
-    # The current implementation calculates them on 'data/Test/prep_images',
-    # which assumes 'data/Test' is where the test set's prepared images reside.
-    # It also means if this function is called alone, it uses the test set's
-    # statistics, which may not be consistent with training.
-    mean_val, std_val = calculate_mean_std(os.path.join(test_base_dir, 'prep_images'), img_size=(img_sizes, img_sizes))
-
     # Initialize the RadiographDatasetBuilder for the test set.
-    # It ensures images are loaded and standardized consistently using the calculated mean/std.
+    # It ensures images are loaded and standardized consistently using the provided mean/std
+    # values (which should come from the training set).
     builder_test = RadiographDatasetBuilder(
         base_dir=test_base_dir,
         label_csv=label_test_dataset_path,
-        mean_pixel_value=mean_val,  # Pass the calculated mean value for standardization
-        std_pixel_value=std_val,  # Pass the calculated standard deviation for standardization
+        mean_pixel_value=mean_pixel_value,  # Pass the mean value for standardization
+        std_pixel_value=std_pixel_value,    # Pass the standard deviation for standardization
         img_size=(img_sizes, img_sizes),
-        batch_size=1  # Set batch size to 1 for individual predictions during evaluation
+        batch_size=1  # Set batch size to 1 to easily capture a single sample for visualizations
     )
     # Build the TensorFlow Dataset for testing. `shuffle=False` ensures consistent order.
-    test_dataset = builder_test.build(
-        train=False)  # Do not shuffle the test set.
+    test_dataset = builder_test.build(train=False)
 
     print(f"\nLoading model from: {model_path}")
     try:
@@ -91,22 +81,43 @@ def evaluate_saved_model(model_path: str,
     true_months: List[float] = []  # List to store true bone ages
     pred_months: List[float] = []  # List to store predicted bone ages
 
-    # Iterate over the test dataset to collect true labels and generate predictions.
-    # `.unbatch()` is used to process each example individually, which is necessary
-    # for collecting one-to-one predictions.
-    try:
-        for inputs, labels in test_dataset.unbatch():
-            # Add a batch dimension to the input tensor as `model.predict` expects batches.
-            input_batch = tf.expand_dims(inputs, axis=0)
+    # Variables to capture a single sample for interpretability visualizations
+    sample_preprocessed_image_tensor = None
+    sample_true_age = None
 
-            # Generate prediction for the single input.
+    try:
+        # Iterate over the test dataset to collect true labels and generate predictions.
+        # Batch size is 1, so each `inputs` and `labels` tensor represents a single sample.
+        for i, (inputs, labels) in enumerate(test_dataset):
+            # Capture the first sample for visualizations.
+            # `inputs` will already have a batch dimension of 1 due to `batch_size=1`.
+            if sample_preprocessed_image_tensor is None:
+                sample_preprocessed_image_tensor = inputs # This is already (1, H, W, C)
+                sample_true_age = labels.numpy()[0] # Extract scalar true age
+
+            # Generate prediction for the current single input.
             # `verbose=0` suppresses output during prediction.
             # `[0][0]` is used to extract the scalar prediction value from the output tensor.
-            prediction = loaded_model.predict(input_batch, verbose=0)[0][0]
+            prediction = loaded_model.predict(inputs, verbose=0)[0][0]
 
             # Append the numpy value of the true label and the scalar prediction.
-            true_months.append(labels.numpy())
+            true_months.append(labels.numpy()[0]) # Extract scalar true age
             pred_months.append(prediction)
+
+            # Optional: If you only need interpretability for the very first sample,
+            # you could break here to speed up evaluation for large datasets.
+            # However, typically you want to evaluate the whole test set.
+            # if i == 0:
+            #     # If you want to stop after processing just the first sample for visualization,
+            #     # you might need to adjust how the overall evaluation `loaded_model.evaluate` is called
+            #     # or ensure this loop processes the whole dataset.
+            #     pass
+            # else:
+            #     # If you uncomment this, only the first image will be processed for both eval and viz.
+            #     # For full dataset evaluation, remove this `break`.
+            #     # break
+            pass # Keep processing the full dataset for comprehensive evaluation
+
     except tf.errors.OutOfRangeError:
         print("Dataset exhausted (end of iteration).")
     except Exception as e:
@@ -121,7 +132,7 @@ def evaluate_saved_model(model_path: str,
 
     # Perform a formal evaluation of the model on the entire test dataset.
     # It's important to build the test_dataset again or ensure its iterator is reset
-    # if it has already been consumed by the `unbatch()` loop, to get a full evaluation.
+    # if it has already been consumed by the previous loop, to get a full evaluation.
     test_dataset_for_eval = builder_test.build(train=False)  # Rebuild to ensure full evaluation
     results = loaded_model.evaluate(test_dataset_for_eval, verbose=0)
 
@@ -129,5 +140,17 @@ def evaluate_saved_model(model_path: str,
     # Print each metric name and its corresponding value from the evaluation results.
     for name, value in zip(loaded_model.metrics_names, results):
         print(f"{name}: {value:.4f}")
+
+    # --- Execute interpretability visualizations on the captured sample ---
+    if sample_preprocessed_image_tensor is not None:
+        run_all_interpretability_plots(
+            loaded_model,
+            sample_preprocessed_image_tensor,
+            sample_true_age,
+            mean_pixel_value,  # Pass the mean value for denormalization
+            std_pixel_value    # Pass the std value for denormalization
+        )
+    else:
+        print("Could not retrieve a sample image for interpretability visualizations. Skipping.")
 
     return results, true_months_np, pred_months_np

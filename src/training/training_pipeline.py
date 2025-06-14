@@ -14,7 +14,7 @@ def training_pipeline(base_dir_train: str, label_train: str,
                       img_sizes: int = 256,
                       mean_pixel_value: float = 0.0, std_pixel_value: float = 1.0,
                       existing_model: Optional[tf.keras.Model] = None,
-                      epochs: int = 50,
+                      epochs: int = 100,
                       model_save_path: str = 'best_age_prediction_model_standalone.keras',
                       learning_rate: float = 0.0005) -> Optional[tf.keras.Model]:
     """
@@ -68,7 +68,7 @@ def training_pipeline(base_dir_train: str, label_train: str,
         std_pixel_value=std_pixel_value
     )
     # Build the TensorFlow Dataset for training. `train=True` implies shuffling.
-    train_dataset = builder_train.build(shuffle=True)
+    train_dataset = builder_train.build(train=True)
 
     # Initialize RadiographDatasetBuilder for the validation set.
     # It uses the same standardization parameters as the training set for consistency.
@@ -81,7 +81,7 @@ def training_pipeline(base_dir_train: str, label_train: str,
         std_pixel_value=std_pixel_value
     )
     # Build the TensorFlow Dataset for validation. `train=False` implies no shuffling.
-    val_dataset = builder_val.build(shuffle=False)
+    val_dataset = builder_val.build(train=False)
 
     # Print the calculated dataset sizes in terms of batches.
     print(f"\nTrain dataset size (batches): {tf.data.experimental.cardinality(train_dataset).numpy()}")

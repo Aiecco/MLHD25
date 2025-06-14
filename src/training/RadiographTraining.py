@@ -86,7 +86,7 @@ def train_model(model: tf.keras.Model,
         epochs=epochs,
         validation_data=validation_dataset,
         callbacks=callbacks,
-        initial_epoch=5 # This parameter means training will resume counting epochs from 5.
+        initial_epoch=50 # This parameter means training will resume counting epochs from 5.
                         # If you are truly restarting a new training, this should be 0.
                         # If you are loading a pre-trained model and want to continue,
                         # this might be set based on the last trained epoch.
