@@ -7,6 +7,7 @@ import os
 
 from src.plot.LIME import explain_prediction_lime
 from src.plot.PlotActivationLayer import visualize_layer_activations
+from src.plot.PlotFilters import visualize_filters
 from src.plot.PlotHeatmapOverlay import visualize_attention_map
 from src.plot.PlotShap import explain_prediction_shap
 
@@ -59,16 +60,16 @@ def run_all_interpretability_plots(
     visualize_layer_activations(
         model,
         preprocessed_image_tensor,
-        layer_names=['conv2d', 'conv2d_2', 'conv2d_4'],  # EXAMPLE NAMES - ADJUST FOR YOUR MODEL
+        layer_names=['prep_conv1a', 'prep_conv3a', 'conv5a'],  # EXAMPLE NAMES - ADJUST FOR YOUR MODEL
         num_filters_to_show=8,
         save_path=os.path.join(output_dir, 'layer_activations.png')
     )
 
     # 3. Filter Visualization (if you want to include it, ensure layer_name is correct)
-    # print("Generating Filter Visualizations...")
-    # visualize_filters(
-    #     model, 
-    #     'conv2d', # EXAMPLE LAYER NAME - ADJUST FOR YOUR MODEL
+    #print("Generating Filter Visualizations...")
+    #visualize_filters(
+    #     model,
+    #     layer_names=['prep_conv1a', 'prep_conv3a', 'conv5a'],
     #     save_path=os.path.join(output_dir, 'filter_visualization.png')
     # )
 
@@ -84,12 +85,12 @@ def run_all_interpretability_plots(
     )
 
     # 5. SHAP Explanation
-    print("Generating SHAP Explanation...")
-    explain_prediction_shap(
-        model,
-        preprocessed_image_tensor,
-        original_display_image,
-        save_path=os.path.join(output_dir, 'shap_explanation.png')
-    )
+    #print("Generating SHAP Explanation...")
+    #explain_prediction_shap(
+    #    model,
+    #    preprocessed_image_tensor,
+    #    original_display_image,
+    #    save_path=os.path.join(output_dir, 'shap_explanation.png')
+    #)
 
     print("All interpretability visualizations complete.")
