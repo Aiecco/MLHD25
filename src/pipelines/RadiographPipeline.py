@@ -57,12 +57,13 @@ def radiograph_pipeline(preprocess: bool = False, training: bool = False, evalua
     # This block handles the training of the deep learning model.
     # It calculates standardization parameters, attempts to load a previously
     # trained model to continue training, and then runs the training pipeline.
+    base_dir_train = 'data/Train'
+    base_dir_val = 'data/Val'
+    mean_val, std_val = None, None
     if training:
         print("\n--- Starting Model Training ---")
         # Define base directories and label CSVs for training and validation datasets.
         # These paths assume a specific directory structure for your data.
-        base_dir_train = 'data/Train'
-        base_dir_val = 'data/Val'
         label_train_csv = os.path.join(base_dir_train, 'train_labels.csv')  # Assuming specific CSV names
         label_val_csv = os.path.join(base_dir_val, 'val_labels.csv')
 
@@ -100,11 +101,17 @@ def radiograph_pipeline(preprocess: bool = False, training: bool = False, evalua
         base_dir_test = 'data/Test'
         label_test_csv = os.path.join(base_dir_test, 'test_labels.csv')
 
+        if mean_val is None or std_val is None:
+            train_prep_images_path = os.path.join(base_dir_train, 'prep_images')
+            mean_val, std_val = calculate_mean_std(train_prep_images_path, img_size=(TARGET_IMG_SIZE, TARGET_IMG_SIZE))
+
         # Execute the evaluation pipeline.
         # It loads the best saved model and evaluates it on the test dataset,
         # applying the same standardization used during training.
         evaluation_pipeline(model_save_path=MODEL_PATH,
                             test_path=base_dir_test,
                             label_path=label_test_csv,
-                            img_sizes=TARGET_IMG_SIZE)
+                            img_sizes=TARGET_IMG_SIZE,
+                            mean_val=mean_val,
+                            std_val=std_val)
         print("--- Model Evaluation Completed ---")

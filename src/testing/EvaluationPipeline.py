@@ -9,10 +9,13 @@ from keras import models  # Keras models module for loading saved models
 
 from src.testing.evaluate import evaluate_saved_model
 
+
 def evaluation_pipeline(model_save_path: str,
                         test_path: str,
                         label_path: str,
                         img_sizes: int,  # Add img_sizes to signature as it's passed to evaluate_saved_model
+                        mean_val: float,
+                        std_val: float,
                         ):
     """
     Orchestrates the evaluation of a trained deep learning model on a test set
@@ -28,6 +31,8 @@ def evaluation_pipeline(model_save_path: str,
         label_path (str): The file path to the CSV containing ground truth labels for the test set.
         img_sizes (int): The target square dimension (e.g., 256) of the images used by the model.
                          This must match the size used during model training and preprocessing.
+        mean_val (float): The mean pixel value calculated from the TRAINING dataset,
+        std_val (float): The standard deviation pixel value calculated from the TRAINING dataset,
 
     Returns:
         None: This function does not return any value but prints evaluation results
@@ -44,6 +49,8 @@ def evaluation_pipeline(model_save_path: str,
             model_save_path,
             test_path,
             label_path,
+            mean_pixel_value=mean_val,
+            std_pixel_value=std_val,
             img_sizes=img_sizes,  # Pass img_sizes
         )
 

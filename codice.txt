@@ -1,0 +1,1608 @@
+# src/dataset/radiograph_dataset_builder.py
+import os
+import tensorflow as tf
+import pandas as pd
+
+
+# --- RadiographDatasetBuilder ---
+class RadiographDatasetBuilder:
+    """
+    Builds a TensorFlow Dataset for radiograph images, handling raw and
+    preprocessed image inputs along with age labels, applying pixel standardization.
+    """
+
+    def __init__(self,
+                 base_dir,
+                 label_csv,
+                 img_subfolder="prep_images",
+                 prepimg_subfolder="prep_images",
+                 img_size=(128, 128),
+                 batch_size=16,
+                 mean_pixel_value: float = 0.0,  # Nuovo parametro per la media
+                 std_pixel_value: float = 1.0):  # Nuovo parametro per la deviazione standard
+        """
+        Initializes the dataset builder.
+
+        Args:
+            base_dir (str): The base directory containing image subfolders.
+            label_csv (str): The name of the CSV file containing image IDs and bone ages,
+                             relative to base_dir.
+            img_subfolder (str): Subfolder containing the main images to list files from.
+            prepimg_subfolder (str): Subfolder containing the preprocessed images.
+            img_size (tuple): Desired image size (height, width).
+            batch_size (int): Batch size for the dataset.
+            mean_pixel_value (float): Mean pixel value for standardizing image data.
+            std_pixel_value (float): Standard deviation of pixel values for standardizing image data.
+        """
+        self.base_dir = base_dir
+        self.img_subfolder = os.path.join(base_dir, img_subfolder)
+        self.prepimg_subfolder = os.path.join(base_dir, prepimg_subfolder)
+        self.img_size = img_size
+        self.batch_size = batch_size
+        self.mean_pixel_value = mean_pixel_value
+        self.std_pixel_value = std_pixel_value
+
+        # Read CSV and prepare age_map
+        # Corretto: label_csv dovrebbe essere relativo a base_dir
+        df = pd.read_csv(label_csv)
+        try:
+            df['filename'] = df['id'].astype(str)
+            df['age_months'] = df['boneage']
+        except KeyError:  # Handle cases where column names might be different or delimiter is ';'
+            df = pd.read_csv(label_csv, delimiter=";")  # Corretto path
+            df['filename'] = df['id'].astype(str)
+            df['age_months'] = df['boneage'].astype(str).str.replace(',', '.').astype(float)
+
+        self.age_map = dict(zip(df['filename'], df['age_months']))
+
+    def _parse_function(self, filepath):
+        """
+        Parses a single image file and its corresponding preprocessed images
+        and age label, applying pixel standardization.
+        This function runs in Python context via tf.py_function.
+
+        Args:
+            filepath (tf.Tensor): The TensorFlow string tensor representing the image file path.
+
+        Returns:
+            tuple: (raw_img, prep_img, age_months) as TensorFlow tensors,
+                   with images standardized.
+        """
+
+        # 2) Extract filename stem to find corresponding preprocessed images
+        fname_tensor = tf.strings.split(filepath, os.sep)[-1]
+        stem_tensor = tf.strings.split(fname_tensor, '.')[0]
+        fname = stem_tensor.numpy().decode('utf-8')  # Python string for dict lookup and path construction
+
+        # Construct path for preprocessed image
+        prep_path = os.path.join(self.prepimg_subfolder, fname + ".png")
+
+        # Read and resize preprocessed image
+        prep_img = tf.io.read_file(prep_path)
+        prep_img = tf.image.decode_png(prep_img, channels=1)  # Decode as grayscale
+        prep_img = tf.image.resize(prep_img, self.img_size)
+
+        # Convert to float32 BEFORE standardization
+        prep_img = tf.cast(prep_img, tf.float32)
+
+        # standardization
+        std_val_safe = self.std_pixel_value if self.std_pixel_value > 1e-7 else 1.0
+
+        prep_img = (prep_img - self.mean_pixel_value) / std_val_safe
+
+        # Get age from map, handling potential comma decimal separator
+        try:
+            age_months = float(self.age_map[fname])
+        except ValueError:
+            age_months = float(str(self.age_map[fname]).replace(',', '.'))
+
+        # Return all three items. The build method's _tf_parse will then select what to pass.
+        return prep_img, age_months
+
+    def build(self, train=True):
+        """
+        Builds and returns a TensorFlow Dataset.
+
+        Args:
+            train (bool): If True, shuffles the dataset.
+
+        Returns:
+            tf.data.Dataset: A TensorFlow dataset yielding
+                             (prep_img, age_months) tuples, as per the model's current input.
+        """
+        pattern = os.path.join(self.img_subfolder, "*.png")
+        ds = tf.data.Dataset.list_files(pattern, shuffle=train)
+
+        def _tf_parse(fp):
+            """
+            TensorFlow-graph compatible wrapper for _parse_function.
+            """
+            # _parse_function restituisce (raw_img, prep_img, age_months)
+            img_prep, age_months = tf.py_function(
+                func=self._parse_function,
+                inp=[fp],  # Pass the filepath tensor to the py_function
+                Tout=[tf.float32, tf.float32]  # Tipi di output di _parse_function
+            )
+
+            # Set static shapes for the output tensors
+            img_prep.set_shape((*self.img_size, 1))
+            age_months.set_shape(())
+
+            return img_prep, age_months  # Restituisce solo l'immagine preprocessata e l'età
+
+        # Map the parsing function over the dataset
+        ds = ds.map(_tf_parse, num_parallel_calls=tf.data.AUTOTUNE)
+
+        # Batch and prefetch for performance
+        ds = ds.batch(self.batch_size).prefetch(tf.data.AUTOTUNE)
+        return ds
+
+import tensorflow as tf
+from keras import layers, regularizers, models
+
+from src.Models.AttentionLayer import \
+    SpatialAttention  # Assuming this import path is correct and SpatialAttention is defined elsewhere
+
+# --- Age Prediction Model with Attention ---
+class AgePredictionModel:
+    """
+    Represents a deep learning model for automated bone age prediction from hand radiographs.
+
+    This model employs a multi-layered Convolutional Neural Network (CNN) backbone
+    for feature extraction, integrated with a custom spatial attention mechanism,
+    and a robust fully connected regression head. It is designed to be gender-agnostic,
+    relying solely on image-derived features for prediction.
+    """
+
+    def __init__(self, img_size=(128, 128)):
+        """
+        Initializes the AgePredictionModel.
+
+        Args:
+            img_size (tuple, optional): The target dimensions (height, width) for input images.
+                                        Defaults to (128, 128). This should match the size
+                                        used in preprocessing.
+        """
+        self.img_size = img_size
+        # Build the Keras model graph immediately upon initialization
+        self.model = self._build_model()
+
+    def _create_cnn_branch(self, input_tensor: tf.Tensor, name_prefix: str) -> tf.Tensor:
+        """
+        Constructs a single Convolutional Neural Network (CNN) branch for feature extraction.
+
+        This branch consists of five sequential blocks, each typically comprising two
+        convolutional layers, Batch Normalization, ReLU activation, and MaxPooling.
+        The number of filters progressively increases with depth.
+
+        Args:
+            input_tensor (tf.Tensor): The input tensor to the CNN branch (e.g., image input).
+            name_prefix (str): A prefix for naming the layers within this branch
+                               to ensure uniqueness (e.g., 'prep', 'raw', 'extr').
+
+        Returns:
+            tf.Tensor: The output tensor from the final MaxPooling layer of this CNN branch,
+                       representing extracted spatial features.
+        """
+        # Block 1: Conv -> BN -> ReLU -> Conv -> BN -> ReLU -> MaxPool
+        # Captures initial low-level features
+        x = layers.Conv2D(32, (3, 3), padding='same',
+                          kernel_regularizer=regularizers.l2(1e-4), name=f'{name_prefix}_conv1a')(input_tensor)
+        x = layers.BatchNormalization(name=f'{name_prefix}_bn1a')(x)
+        x = layers.Activation('relu', name=f'{name_prefix}_relu1a')(x)
+        x = layers.Conv2D(32, (3, 3), padding='same',
+                          kernel_regularizer=regularizers.l2(1e-4), name=f'{name_prefix}_conv1b')(x)
+        x = layers.BatchNormalization(name=f'{name_prefix}_bn1b')(x)
+        x = layers.Activation('relu', name=f'{name_prefix}_relu1b')(x)
+        x = layers.MaxPooling2D((2, 2), strides=(2, 2), name=f'{name_prefix}_pool1')(x)
+
+        # Block 2: Increase filters, capture more complex features
+        x = layers.Conv2D(64, (3, 3), padding='same',
+                          kernel_regularizer=regularizers.l2(1e-4), name=f'{name_prefix}_conv2a')(x)
+        x = layers.BatchNormalization(name=f'{name_prefix}_bn2a')(x)
+        x = layers.Activation('relu', name=f'{name_prefix}_relu2a')(x)
+        x = layers.Conv2D(64, (3, 3), padding='same',
+                          kernel_regularizer=regularizers.l2(1e-4), name=f'{name_prefix}_conv2b')(x)
+        x = layers.BatchNormalization(name=f'{name_prefix}_bn2b')(x)
+        x = layers.Activation('relu', name=f'{name_prefix}_relu2b')(x)
+        x = layers.MaxPooling2D((2, 2), strides=(2, 2), name=f'{name_prefix}_pool2')(x)
+
+        # Block 3: Further increase filters for higher-level feature abstraction
+        x = layers.Conv2D(128, (3, 3), padding='same',
+                          kernel_regularizer=regularizers.l2(1e-4), name=f'{name_prefix}_conv3a')(x)
+        x = layers.BatchNormalization(name=f'{name_prefix}_bn3a')(x)
+        x = layers.Activation('relu', name=f'{name_prefix}_relu3a')(x)
+        x = layers.Conv2D(128, (3, 3), padding='same',
+                          kernel_regularizer=regularizers.l2(1e-4), name=f'{name_prefix}_conv3b')(x)
+        x = layers.BatchNormalization(name=f'{name_prefix}_bn3b')(x)
+        x = layers.Activation('relu', name=f'{name_prefix}_relu3b')(x)
+        x = layers.MaxPooling2D((2, 2), strides=(2, 2), name=f'{name_prefix}_pool3')(x)
+
+        # Block 4: Continue increasing filter depth
+        x = layers.Conv2D(256, (3, 3), padding='same',
+                          kernel_regularizer=regularizers.l2(1e-4), name=f'{name_prefix}_conv4a')(x)
+        x = layers.BatchNormalization(name=f'{name_prefix}_bn4a')(x)
+        x = layers.Activation('relu', name=f'{name_prefix}_relu4a')(x)
+        x = layers.Conv2D(256, (3, 3), padding='same',
+                          kernel_regularizer=regularizers.l2(1e-4), name=f'{name_prefix}_conv4b')(x)
+        x = layers.BatchNormalization(name=f'{name_prefix}_bn4b')(x)
+        x = layers.Activation('relu', name=f'{name_prefix}_relu4b')(x)
+        x = layers.MaxPooling2D((2, 2), strides=(2, 2), name=f'{name_prefix}_pool4')(x)
+
+        # Block 5: Final convolutional block in the backbone
+        # Note: Filter count adjusted to 512 in the theoretical write-up for deeper abstraction,
+        # but kept at 256 here based on provided code's last working state.
+        # If input size is 256x256, after 5 pools, spatial dim becomes 8x8.
+        x = layers.Conv2D(256, (3, 3), padding='same', name='conv5a',
+                          kernel_regularizer=regularizers.l2(1e-4))(x)  # Added L2 regularization for consistency
+        x = layers.BatchNormalization(name='bn5a')(x)
+        x = layers.Activation('relu', name='relu5a')(x)
+        x = layers.Conv2D(256, (3, 3), padding='same', name='conv5b',
+                          kernel_regularizer=regularizers.l2(1e-4))(x)  # Added L2 regularization for consistency
+        x = layers.BatchNormalization(name='bn5b')(x)
+        x = layers.Activation('relu', name='relu5b')(x)
+        x = layers.MaxPooling2D((2, 2), name='pool5')(x)
+
+        return x
+
+    def _build_model(self) -> models.Model:
+        """
+        Constructs the complete Keras model for bone age prediction.
+
+        The model integrates a CNN backbone for feature extraction,
+        a Spatial Attention layer, and a multi-layered regression head.
+
+        Returns:
+            tf.keras.Model: The compiled Keras Model instance.
+        """
+        # Define the input layer for preprocessed images.
+        # The input shape is (height, width, channels), where channels=1 for grayscale.
+        prep_input = layers.Input(shape=(*self.img_size, 1), name='prep_input')
+
+        # Create the CNN branch for feature extraction from the preprocessed input.
+        prep_features = self._create_cnn_branch(prep_input, 'prep')
+
+        # Apply the custom Spatial Attention mechanism to the extracted features.
+        # This layer selectively re-weights spatial regions, focusing on diagnostically
+        # relevant areas of the radiograph.
+        attended_prep_features = SpatialAttention(name='attention_prep')(prep_features)
+
+        # Flatten the attended features to prepare for the fully connected layers.
+        x = layers.Flatten(name='flatten_features')(attended_prep_features)
+
+        # --- Regression Head: Fully Connected Layers for Age Prediction ---
+        # Dense Layer 1: Processes the flattened features.
+        # Followed by Batch Normalization and Dropout for regularization.
+        x = layers.Dense(512, activation='relu', name='dense1',
+                         kernel_regularizer=regularizers.l2(1e-4))(x)
+        x = layers.BatchNormalization(name='bn_dense1')(x)
+        x = layers.Dropout(0.4, name='dropout1')(x)
+
+        # Dense Layer 2: Further refines the features.
+        # Includes Batch Normalization and Dropout.
+        x = layers.Dense(256, activation='relu', name='dense2',
+                         kernel_regularizer=regularizers.l2(1e-4))(x)
+        x = layers.BatchNormalization(name='bn_dense2')(x)
+        x = layers.Dropout(0.4, name='dropout2')(x)
+
+        # Dense Layer 3: Adds more complexity to the mapping.
+        # Also includes Batch Normalization and Dropout.
+        x = layers.Dense(128, activation='relu', name='dense3',
+                         kernel_regularizer=regularizers.l2(1e-4))(x)
+        x = layers.BatchNormalization(name='bn_dense3')(x)
+        x = layers.Dropout(0.3, name='dropout3')(x)
+
+        # Final Output Layer: Predicts the bone age in months.
+        # 'linear' activation allows for any real value output.
+        # A subsequent 'relu' activation is applied to ensure predictions are non-negative.
+        output_linear = layers.Dense(1, name='age_output_linear',
+                                     kernel_regularizer=regularizers.l2(1e-4))(x)  # Added L2 for consistency
+        # Force predictions to be non-negative (bone age cannot be < 0)
+        output = layers.Activation('relu', name='age_output_relu')(output_linear)
+
+        # Create the Keras Model instance, defining its inputs and outputs.
+        model = models.Model(inputs=prep_input, outputs=output, name='AgePredictionModel')
+        return model
+
+    def compile_model(self, learning_rate: float = 0.0005):
+        """
+        Compiles the Keras model with a specified optimizer, loss function, and metrics.
+
+        Args:
+            learning_rate (float, optional): The initial learning rate for the Adam optimizer.
+                                             Defaults to 0.0005.
+        """
+        # Use Adam optimizer for efficient training with adaptive learning rates.
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+
+        # Compile the model specifying Mean Absolute Error (MAE) as the loss function
+        # (directly interpretable as error in months) and also track it as a metric.
+        self.model.compile(optimizer=optimizer, loss='mae', metrics=['mae'])
+
+from keras import layers
+import tensorflow as tf
+
+class SpatialAttention(layers.Layer):
+    """
+    A custom Keras layer implementing a more attentive spatial attention mechanism.
+    It now includes an intermediate convolutional layer to learn richer attention features.
+    """
+
+    def __init__(self, kernel_size=7, **kwargs):
+        super(SpatialAttention, self).__init__(**kwargs)
+        self.kernel_size = kernel_size
+
+        # Intermediate conv layer to learn more complex features from concatenated avg/max pools
+        # More filters (e.g., 8 or 16) for more capacity, smaller kernel for local patterns.
+        self.intermediate_conv = layers.Conv2D(
+            filters=32,  # Increased filters for more "intelligence"
+            kernel_size=5,  # Small kernel for local feature extraction within attention
+            padding='same',
+            activation='relu',  # Added ReLU activation for non-linearity
+            name='attention_intermediate_conv'
+        )
+        # Final conv layer to produce the single-channel attention map
+        self.final_conv = layers.Conv2D(
+            filters=1,
+            kernel_size=self.kernel_size,  # Use the initial kernel_size for the final aggregation
+            padding='same',
+            activation='sigmoid',  # Sigmoid to output values between 0 and 1
+            use_bias=False,
+            name='attention_final_conv'
+        )
+
+    def build(self, input_shape):
+        # Keras will automatically build internal layers like self.intermediate_conv and self.final_conv
+        super(SpatialAttention, self).build(input_shape)
+
+    def call(self, inputs):
+        """
+        Applies spatial attention to the input feature map.
+        The attention map is now generated by a slightly deeper sub-network.
+        """
+        # Compute average and max pool along the channel axis
+        avg_pool = tf.reduce_mean(inputs, axis=-1, keepdims=True)
+        max_pool = tf.reduce_max(inputs, axis=-1, keepdims=True)
+        concat = layers.concatenate([avg_pool, max_pool], axis=-1, name='attention_concat_pools')
+
+        # Process through intermediate conv layer
+        x = self.intermediate_conv(concat)
+        # Apply final conv to get the attention map
+        attention_map = self.final_conv(x)
+
+        return inputs * attention_map
+
+    def get_config(self):
+        config = super(SpatialAttention, self).get_config()
+        config.update({"kernel_size": self.kernel_size})
+        return config
+
+import os.path
+
+# Imports for preprocessing utilities
+from src.preprocessing.PreprocessImage import calculate_mean_std  # Function to calculate mean/std for standardization
+from src.preprocessing.PreprocessPipeline import preprocess_pipeline  # Full preprocessing pipeline function
+
+# Imports for model evaluation
+from src.testing.EvaluationPipeline import evaluation_pipeline  # Orchestrates model evaluation
+
+# Imports for model training
+from src.training.training_pipeline import training_pipeline  # Orchestrates model training pipeline
+
+# Imports for utility functions
+from src.utils.load_model import load_trained_model  # Utility function to load a Keras model
+
+# --- Global Constants ---
+MODEL_PATH = 'best_age_prediction_model.keras'
+"""
+str: The default file path for saving and loading the best trained Keras model.
+"""
+TARGET_IMG_SIZE = 256
+"""
+int: The target size (height and width) in pixels for preprocessed images.
+     Images will be resized to (TARGET_IMG_SIZE, TARGET_IMG_SIZE).
+"""
+
+def radiograph_pipeline(preprocess: bool = False, training: bool = False, evaluate: bool = False):
+    """
+    Main pipeline orchestrator for bone age assessment from radiographs.
+
+    This function controls the entire workflow, including data preprocessing,
+    model training, and model evaluation, based on the boolean flags provided.
+
+    Args:
+        preprocess (bool, optional): If True, executes the image preprocessing pipeline
+                                     for training, validation, and test datasets.
+                                     This creates standardized image files. Defaults to False.
+        training (bool, optional): If True, executes the model training pipeline.
+                                   It calculates mean/std for standardization, loads an
+                                   existing model (if available), and initiates training.
+                                   Defaults to False.
+        evaluate (bool, optional): If True, executes the model evaluation pipeline on
+                                   the test dataset using the best saved model. Defaults to False.
+    """
+    # --- Phase 1: Data Preprocessing ---
+    # This block performs image preprocessing (hand detection, CLAHE, resizing, augmentation)
+    # and saves the processed images to specified 'prep_images' directories.
+    # It needs to be run once to prepare the dataset for training/evaluation.
+    if preprocess:
+        print("\n--- Starting Data Preprocessing ---")
+        preprocess_pipeline('data/Val/', Val=True)
+        preprocess_pipeline('data/Test/', Test=True, Val=False)  # Val=False ensures it's treated as Test
+        preprocess_pipeline('data/Train/', Train=True, Val=False)  # Val=False ensures it's treated as Train
+        print("--- Data Preprocessing Completed ---")
+
+    # --- Phase 2: Model Training ---
+    # This block handles the training of the deep learning model.
+    # It calculates standardization parameters, attempts to load a previously
+    # trained model to continue training, and then runs the training pipeline.
+    if training:
+        print("\n--- Starting Model Training ---")
+        # Define base directories and label CSVs for training and validation datasets.
+        # These paths assume a specific directory structure for your data.
+        base_dir_train = 'data/Train'
+        base_dir_val = 'data/Val'
+        label_train_csv = os.path.join(base_dir_train, 'train_labels.csv')  # Assuming specific CSV names
+        label_val_csv = os.path.join(base_dir_val, 'val_labels.csv')
+
+        # Calculate mean and standard deviation of pixel values from the preprocessed
+        # training images. These values are crucial for standardizing all datasets
+        # (train, validation, test) to ensure consistency during model inference.
+        train_prep_images_path = os.path.join(base_dir_train, 'prep_images')
+        mean_val, std_val = calculate_mean_std(train_prep_images_path, img_size=(TARGET_IMG_SIZE, TARGET_IMG_SIZE))
+
+        # Attempt to load a pre-trained model. If MODEL_PATH exists and the model
+        # can be loaded, training will resume from its current state. Otherwise,
+        # a new model will be initialized from scratch.
+        model = load_trained_model(model_save_path=MODEL_PATH)
+
+        # Execute the training pipeline.
+        # It orchestrates dataset loading, model compilation, and the training loop
+        # using the calculated standardization values and the loaded/new model.
+        training_pipeline(base_dir_train=base_dir_train,
+                          label_train=label_train_csv,
+                          label_val=label_val_csv,
+                          base_dir_val=base_dir_val,
+                          img_sizes=TARGET_IMG_SIZE,
+                          mean_pixel_value=mean_val,
+                          std_pixel_value=std_val,
+                          existing_model=model,  # Pass the loaded model (or None if new)
+                          model_save_path=MODEL_PATH)
+        print("--- Model Training Completed ---")
+
+    # --- Phase 3: Model Evaluation ---
+    # This block evaluates the performance of the best saved model on the test dataset.
+    # It uses the same standardization parameters from training for consistency.
+    if evaluate:
+        print("\n--- Starting Model Evaluation ---")
+        # Define base directories and label CSV for the test dataset.
+        base_dir_test = 'data/Test'
+        label_test_csv = os.path.join(base_dir_test, 'test_labels.csv')
+
+        # Execute the evaluation pipeline.
+        # It loads the best saved model and evaluates it on the test dataset,
+        # applying the same standardization used during training.
+        evaluation_pipeline(model_save_path=MODEL_PATH,
+                            test_path=base_dir_test,
+                            label_path=label_test_csv,
+                            img_sizes=TARGET_IMG_SIZE)
+        print("--- Model Evaluation Completed ---")
+
+# src/plot/plot_evaluation.py
+import numpy as np
+import pandas as pd
+from matplotlib import pyplot as plt
+import seaborn as sns
+
+def plot_eval(errors_list, mae_months, true_months_list, pred_months_list):
+    """
+        Generates and saves a series of plots to analyze the performance of
+        the age prediction model.
+
+        Args:
+            errors_list (list/array): List of absolute prediction errors (months).
+            mae_months (float): Overall Mean Absolute Error (months).
+            true_months_list (list/array): List of true ages (months).
+            pred_months_list (list/array): List of predicted ages (months).
+        """
+    plt.figure(figsize=(18, 12))
+
+    # 1. Distribution of absolute errors
+    plt.subplot(2, 2, 1)
+    sns.histplot(errors_list, kde=True, bins=30)
+    plt.axvline(mae_months, color='r', linestyle='--', label=f'MAE: {mae_months:.2f} months')
+    plt.xlabel('Absolute Error (months)')
+    plt.ylabel('Frequency')
+    plt.title('Distribution of Age Prediction Errors')
+    plt.legend()
+
+    # 2. Scatter plot: true age vs predicted age
+    plt.subplot(2, 2, 2)
+    plt.scatter(true_months_list, pred_months_list, alpha=0.5)
+    # Ideal y=x line
+    min_val = min(min(true_months_list), min(pred_months_list))
+    max_val = max(max(true_months_list), max(pred_months_list))
+    plt.plot([min_val, max_val], [min_val, max_val], 'r--', label='Ideal')
+    plt.xlabel('True Age (months)')
+    plt.ylabel('Predicted Age (months)')
+    plt.title('True Age vs Predicted Age')
+    plt.legend()
+
+    # 3. Box plot of errors by age group
+    plt.subplot(2, 2, 3)
+
+    # Create age bins
+    # Extended bins to cover a wider range if necessary
+    age_bins = [0, 36, 72, 120, 180, 240, 300]  # Years: 0-3, 3-6, 6-10, 10-15, 15-20, 20-25
+    age_labels = ['0-3', '3-6', '6-10', '10-15', '15-20', '20+']  # Corresponding to the bins
+
+    # Ensure age_bins covers the entire age range of your data
+    if max(true_months_list) > age_bins[-1]:
+        # Add a final bin if there are ages beyond the defined maximum
+        age_bins.append(int(max(true_months_list) + 12))  # Add one more year to the max
+        age_labels.append(f'{age_labels[-1]}+')  # Update the label for the last bin
+
+    # Create a pandas Series for age
+    age_series = pd.Series(true_months_list)
+    binned_ages = pd.cut(age_series, bins=age_bins, labels=age_labels, right=False)  # right=False for interval [a, b)
+
+    # Create a DataFrame with age and errors
+    error_df = pd.DataFrame({
+        'Age_Group': binned_ages,
+        'Absolute_Error': errors_list
+    })
+
+    # Box plot
+    sns.boxplot(x='Age_Group', y='Absolute_Error', data=error_df)
+    plt.xlabel('Age Group (years)')
+    plt.ylabel('Absolute Error (months)')
+    plt.title('Distribution of Errors by Age Group')
+    plt.xticks(rotation=45)
+
+    # 4. Heatmap: error based on true vs predicted age
+    plt.subplot(2, 2, 4)
+
+    # Convert months to years for readability
+    true_years_array = np.array(true_months_list) / 12
+    pred_years_array = np.array(pred_months_list) / 12
+
+    # Define bins for years (e.g., 0-4, 4-8, 8-12, 12-16, 16-20, 20+)
+    # Use a step for the bins and ensure they cover the entire age range
+    max_age_in_years = max(np.max(true_years_array), np.max(pred_years_array))
+    # Create dynamic bins that include all existing ages
+    # Example: bins every 4 years, but the last bin includes the maximum
+    bins_years = np.arange(0, max_age_in_years + 5, 4)  # Add a little margin
+    if max_age_in_years > bins_years[-1]:  # Ensure the last bin covers the maximum
+        bins_years = np.append(bins_years, max_age_in_years + 1)
+
+    # Calculate 2D distributions with np.histogram2d
+    heatmap, xedges, yedges = np.histogram2d(true_years_array, pred_years_array, bins=[bins_years, bins_years])
+
+    # Normalize by row to show the distribution of predictions for each true age group
+    row_sums = heatmap.sum(axis=1, keepdims=True)
+    heatmap_norm = np.divide(heatmap, row_sums, out=np.zeros_like(heatmap), where=row_sums != 0)
+
+    # Create labels for the heatmap axes
+    x_labels = [f'{int(xedges[i])}-{int(xedges[i + 1])}' if i < len(xedges) - 2 else f'{int(xedges[i])}+' for i in
+                range(len(xedges) - 1)]
+    y_labels = [f'{int(yedges[i])}-{int(yedges[i + 1])}' if i < len(yedges) - 2 else f'{int(yedges[i])}+' for i in
+                range(len(yedges) - 1)]
+
+    sns.heatmap(heatmap_norm, cmap='YlGnBu', annot=True, fmt=".2f",
+                xticklabels=x_labels,
+                yticklabels=y_labels)
+    plt.xlabel('Predicted Age (years)')
+    plt.ylabel('True Age (years)')
+    plt.title('Distribution of Predictions by Age Group (Row Normalized)')
+
+    plt.tight_layout()
+    plt.savefig('age_prediction_analysis.png', dpi=300)
+    plt.show()
+
+# src/plot/plot_training_history.py
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from keras.callbacks import History # For type hinting
+
+def plot_training_history(history: History, save_path: str = 'training_history_plots.png'):
+    """
+    Generates and saves plots of the loss and MAE from the training and validation history.
+
+    Args:
+        history (tf.keras.callbacks.History): The History object returned by model.fit().
+        save_path (str): The full path where the plot will be saved.
+    """
+    if not isinstance(history, History):
+        print("Error: 'history' must be an instance of tf.keras.callbacks.History.")
+        return
+
+    hist = history.history
+    epochs = range(1, len(hist['loss']) + 1)
+
+    plt.figure(figsize=(15, 6))
+
+    # Plot of Loss
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, hist['loss'], label='Training Loss')
+    if 'val_loss' in hist:
+        plt.plot(epochs, hist['val_loss'], label='Validation Loss')
+    plt.title('Loss Curve During Training')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss (MAE)')
+    plt.legend()
+    plt.grid(True)
+
+    # Plot of MAE
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, hist['mae'], label='Training MAE')
+    if 'val_mae' in hist:
+        plt.plot(epochs, hist['val_mae'], label='Validation MAE')
+    plt.title('MAE Curve During Training')
+    plt.xlabel('Epoch')
+    plt.ylabel('MAE (Months)')
+    plt.legend()
+    plt.grid(True)
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300)
+    print(f"\nTraining history plots saved as '{save_path}'.")
+    plt.show() # Display the plot
+
+import os
+import numpy as np
+import random
+import cv2
+from tqdm import tqdm  # For progress bar
+from typing import Optional, Tuple
+
+# --- Constants ---
+OUTPUT_SIZE: int = 500
+"""
+int: Default target dimension for resizing images (height and width).
+     Images will be resized to (OUTPUT_SIZE, OUTPUT_SIZE) pixels.
+"""
+OFFSET_PERCENT: int = 5
+"""
+int: Percentage by which to expand the detected hand's bounding box
+     during cropping, providing a margin around the hand.
+"""
+BLUR_KERNEL_SIZE: int = 7
+"""
+int: Kernel size for the Gaussian Blur applied to images during hand detection.
+     Must be an odd integer.
+"""
+MIN_CONTOUR_AREA_FACTOR: float = 0.05
+"""
+float: Minimum contour area as a factor of the total image area.
+       Contours smaller than this threshold are ignored during hand detection,
+       to filter out small artifacts.
+"""
+
+# --- Functions ---
+def apply_clahe(image_gray: np.ndarray) -> np.ndarray:
+    """
+    Applies Contrast Limited Adaptive Histogram Equalization (CLAHE) to a grayscale image.
+
+    CLAHE is used to enhance the contrast of the image, especially in regions
+    where contrast might be low, while limiting noise amplification. This is
+    particularly useful for medical images like X-rays.
+
+    Args:
+        image_gray (np.ndarray): The input grayscale image (NumPy array).
+
+    Returns:
+        np.ndarray: The contrast-enhanced grayscale image.
+    """
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    return clahe.apply(image_gray)
+
+
+def detect_and_crop_hand_cv(
+        image_gray: np.ndarray,
+        offset_percent: int = OFFSET_PERCENT,
+        blur_ksize: int = BLUR_KERNEL_SIZE,
+        min_area_factor: float = MIN_CONTOUR_AREA_FACTOR) -> Optional[np.ndarray]:
+    """
+    Detects the main hand region in a grayscale X-ray image and crops it.
+
+    This function uses OpenCV's contour detection to find the largest connected
+    component (assumed to be the hand) and crops the image around its bounding box,
+    applying an optional offset.
+
+    Args:
+        image_gray (np.ndarray): The input grayscale image.
+        offset_percent (int, optional): Percentage to expand the bounding box. Defaults to OFFSET_PERCENT.
+        blur_ksize (int, optional): Kernel size for initial Gaussian blur. Defaults to BLUR_KERNEL_SIZE.
+        min_area_factor (float, optional): Minimum contour area relative to image area. Defaults to MIN_CONTOUR_AREA_FACTOR.
+
+    Returns:
+        Optional[np.ndarray]: The cropped image containing the hand, or None if
+                              no suitable hand contour is found or cropping fails.
+    """
+    h, w = image_gray.shape
+
+    # Apply Gaussian blur to reduce noise and smooth the image, aiding contour detection.
+    blurred = cv2.GaussianBlur(image_gray, (blur_ksize, blur_ksize), 0)
+
+    # Apply Otsu's thresholding to convert the grayscale image to a binary image.
+    # This automatically determines an optimal threshold value.
+    _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Find contours in the binary image. RETR_EXTERNAL retrieves only the outer contours.
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # If no contours are found, return None as hand detection failed.
+    if not contours:
+        return None
+
+    # Find the largest contour by area, assuming it corresponds to the hand.
+    largest_contour = max(contours, key=cv2.contourArea)
+    area = cv2.contourArea(largest_contour)
+    min_area = h * w * min_area_factor
+
+    # If the largest contour's area is too small, it's likely noise, so return None.
+    if area < min_area:
+        return None
+
+    # Get the bounding box coordinates (x, y, width, height) of the largest contour.
+    x, y, wb, hb = cv2.boundingRect(largest_contour)
+
+    # Calculate the offset for the bounding box based on the specified percentage,
+    # ensuring the cropped region includes a margin around the hand.
+    offset_h = int((h * offset_percent) / 100)
+    offset_w = int((w * offset_percent) / 100)
+
+    # Calculate the final coordinates for cropping, ensuring they stay within image boundaries.
+    y_min = max(0, y - offset_h)
+    y_max = min(h, y + hb + offset_h)
+    x_min = max(0, x - offset_w)
+    x_max = min(w, x + wb + offset_w)
+
+    # Crop the original grayscale image using the calculated bounding box.
+    # Ensure the cropping dimensions are valid (max > min).
+    if y_max > y_min and x_max > x_min:
+        return image_gray[y_min:y_max, x_min:x_max]
+    else:  # If calculated box is invalid (e.g., negative or zero dimensions)
+        return None
+
+
+def resize(image_gray: np.ndarray, output_size: int = OUTPUT_SIZE) -> np.ndarray:
+    """
+    Resizes a grayscale image to a square output_size, preserving aspect ratio by padding.
+
+    The image is first padded to a square shape based on its maximum dimension,
+    using the mean pixel value as padding color. Then, it's resized to the final
+    desired output size.
+
+    Args:
+        image_gray (np.ndarray): The input grayscale image.
+        output_size (int, optional): The target square dimension (e.g., 500x500). Defaults to OUTPUT_SIZE.
+
+    Returns:
+        np.ndarray: The resized and padded grayscale image.
+    """
+    h, w = image_gray.shape
+    max_dim = max(h, w)
+
+    # Calculate padding needed to make the image square.
+    top_pad = (max_dim - h) // 2
+    bottom_pad = max_dim - h - top_pad
+    left_pad = (max_dim - w) // 2
+    right_pad = max_dim - w - left_pad
+
+    # Pad the image with the mean pixel value of the original image.
+    padding = int(np.mean(image_gray))
+    padded_img = cv2.copyMakeBorder(image_gray, top_pad, bottom_pad, left_pad, right_pad,
+                                    cv2.BORDER_CONSTANT, value=padding)
+
+    # Resize the padded image to the final output size using area interpolation (good for shrinking).
+    resized_img = cv2.resize(padded_img, (output_size, output_size), interpolation=cv2.INTER_AREA)
+    return resized_img
+
+
+def aug(image: np.ndarray) -> np.ndarray:
+    """
+    Applies a set of random augmentations to a grayscale image.
+
+    These augmentations are typically used during training to increase the diversity
+    of the dataset and improve the model's generalization capabilities.
+    Applied augmentations include: random horizontal flip, random 90/180/270 degree rotations,
+    random inversion (negative image), random brightness adjustment, and random contrast adjustment.
+
+    Args:
+        image (np.ndarray): The input grayscale image (NumPy array).
+
+    Returns:
+        np.ndarray: The augmented image.
+    """
+    # Random horizontal flip: Flips the image left-right with 50% probability.
+    if random.random() > 0.5:
+        image = cv2.flip(image, 1)
+
+    # Random 90/180/270 degree rotation: Rotates the image with 75% probability.
+    # None means no rotation.
+    rot_code = random.choice([None, cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE])
+    if rot_code is not None:
+        image = cv2.rotate(image, rot_code)
+
+    # Random inversion (negative image): Inverts pixel values (255-x) with 50% probability.
+    if random.random() > 0.5:
+        image = 255 - image  # Invert pixel values for 8-bit grayscale (0-255 range)
+
+    # Random brightness adjustment: Adjusts brightness by a random factor (0.7 to 1.3) with 50% probability.
+    # `cv2.convertScaleAbs` handles clipping to 0-255 and converts to absolute values.
+    if random.random() > 0.5:
+        alpha = random.uniform(0.7, 1.3)  # Factor for brightness (1.0 is no change)
+        image = cv2.convertScaleAbs(image, alpha=alpha, beta=0)  # beta is offset, set to 0
+
+    # Random contrast adjustment: Adjusts contrast by a random factor (0.7 to 1.3) with 50% probability.
+    if random.random() > 0.5:
+        alpha = random.uniform(0.7, 1.3)  # Factor for contrast
+        # `cv2.convertScaleAbs` (alpha, beta) performs: output = alpha * input + beta
+        image = cv2.convertScaleAbs(image, alpha=alpha, beta=0)
+
+    return image
+
+
+def calculate_mean_std(image_folder: str, img_size: Tuple[int, int]) -> Tuple[float, float]:
+    """
+    Calculates the mean and standard deviation of pixel values across all images
+    within a specified folder.
+
+    This function iterates through all PNG images in the given directory,
+    resizes them (if necessary), flattens their pixel values, and then computes
+    the overall mean and standard deviation. It includes detailed logging for
+    files that cannot be read or processed. These calculated values are crucial
+    for standardizing the dataset for neural network input.
+
+    Args:
+        image_folder (str): The path to the directory containing the images (e.g., 'data/Train/prep_images').
+        img_size (Tuple[int, int]): The target size (height, width) to which images should be
+                                     resized before calculating pixel values. This ensures
+                                     consistency in the calculation.
+
+    Returns:
+        Tuple[float, float]: A tuple containing the mean and standard deviation of all
+                             processed pixel values. Returns (0.0, 1.0) if no valid
+                             pixel values are found to prevent division by zero errors.
+    """
+    pixel_values = []
+    print(f"\nCalculating mean and standard deviation for images in: {image_folder}")
+    # List all PNG files in the specified folder.
+    image_files = [f for f in os.listdir(image_folder) if f.endswith('.png')]
+
+    total_files = len(image_files)
+    processed_count = 0
+    skipped_count = 0
+
+    # Iterate through each image file with a progress bar.
+    for img_file in tqdm(image_files, desc="Processing images for mean/std"):
+        img_path = os.path.join(image_folder, img_file)
+        try:
+            # Preliminary check for empty or corrupted files by checking file size.
+            if os.path.getsize(img_path) == 0:
+                print(f"Warning: Skipped empty file {img_file}")
+                skipped_count += 1
+                continue
+
+            # Read the image as grayscale directly using OpenCV.
+            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                # cv2.imread returns None if it fails to read the file (e.g., corrupted, wrong format).
+                print(f"Warning: Could not read or process {img_file}. Skipping.")
+                skipped_count += 1
+                continue
+
+            # Resize the image to the target size if its dimensions don't match.
+            # This ensures all images contribute equally to the mean/std calculation,
+            # regardless of their initial cropped size variability.
+            if img.shape[0] != img_size[0] or img.shape[1] != img_size[1]:
+                img = cv2.resize(img, img_size, interpolation=cv2.INTER_AREA)
+
+            # Flatten the 2D image array into a 1D array of pixel values and extend the list.
+            pixel_values.extend(img.flatten())
+            processed_count += 1
+        except Exception as e:
+            # Catch any unexpected errors during image processing and log a warning.
+            print(f"Warning: An unexpected error occurred while processing {img_file}: {e}. Skipping.")
+            skipped_count += 1
+
+    # Convert the list of pixel values to a NumPy array for efficient calculation.
+    pixel_values = np.array(pixel_values, dtype=np.float32)
+
+    # Print a summary of the mean/std calculation process.
+    print("-" * 50)
+    print(f"Mean/Std Calculation Summary for {image_folder}:")
+    print(f"Total files found: {total_files}")
+    print(f"Successfully processed files: {processed_count}")
+    print(f"Skipped files: {skipped_count}")
+    print("-" * 50)
+
+    # If no valid pixel values were found (e.g., all files skipped), return default
+    # values to prevent division by zero errors in standardization.
+    if len(pixel_values) == 0:
+        print("No valid pixel values found for mean/std calculation. Returning default values (0.0, 1.0).")
+        return 0.0, 1.0
+
+    # Calculate the mean and standard deviation of the collected pixel values.
+    mean_val = np.mean(pixel_values)
+    std_val = np.std(pixel_values)
+
+    # Safeguard against zero standard deviation (e.g., if all pixels have the same value).
+    # In such cases, replace std_val with 1.0 to prevent division by zero during standardization.
+    if std_val < 1e-7:  # Using a small epsilon to check for near-zero std
+        std_val = 1.0
+
+    print(f"Mean pixel value of the training set: {mean_val:.4f}")
+    print(f"Standard deviation of the training set pixel values: {std_val:.4f}")
+    return mean_val, std_val
+
+import os
+import sys
+import time
+import cv2
+from tqdm import tqdm
+
+# Import specific preprocessing functions from PreprocessImage module
+from src.preprocessing.PreprocessImage import detect_and_crop_hand_cv, apply_clahe, aug, resize
+
+# --- Constants for Directory Names ---
+valid_sample_dir = 'validation_samples'
+"""str: Subdirectory name for validation raw images."""
+test_sample_dir = 'test_samples'
+"""str: Subdirectory name for test raw images."""
+train_sample_dir = 'train_samples'
+"""str: Subdirectory name for training raw images."""
+prep_img_dir = 'prep_images'
+"""str: Subdirectory name where preprocessed images will be saved."""
+
+def preprocess_pipeline(folder: str, Train: bool = False, Test: bool = False, Val: bool = True):
+    """
+    Orchestrates the preprocessing of image datasets based on the specified set type.
+
+    This function determines which input subdirectory to use (train, validation, or test)
+    and calls the `preprocess_images` function accordingly, enabling augmentation
+    only for the training set.
+
+    Args:
+        folder (str): The base directory containing the raw image subfolders (e.g., 'data/Train').
+        Train (bool, optional): If True, preprocesses the training samples and applies augmentation. Defaults to False.
+        Test (bool, optional): If True, preprocesses the test samples (no augmentation). Defaults to False.
+        Val (bool, optional): If True, preprocesses the validation samples (no augmentation). Defaults to True.
+                              Note: Only one of Train, Test, or Val should typically be True.
+    """
+    if Val:  # Preprocess validation samples
+        subdir_input = os.path.join(folder, valid_sample_dir)
+        subdir_output = os.path.join(folder, prep_img_dir)
+        preprocess_images(subdir_input, subdir_output, augment=False)  # No augmentation for validation
+    elif Train:  # Preprocess training samples
+        subdir_input = os.path.join(folder, train_sample_dir)
+        subdir_output = os.path.join(folder, prep_img_dir)
+        preprocess_images(subdir_input, subdir_output, augment=True)  # Apply augmentation for training
+    elif Test:  # Preprocess test samples
+        subdir_input = os.path.join(folder, test_sample_dir)
+        subdir_output = os.path.join(folder, prep_img_dir)
+        preprocess_images(subdir_input, subdir_output, augment=False)  # No augmentation for test
+    else:
+        print("Warning: No dataset type (Train, Test, Val) specified for preprocessing. No action taken.")
+
+
+def preprocess_images(input_path: str, output_path: str, output_size: int = 256, augment: bool = False):
+    """
+    Processes images from an input directory and saves the processed versions
+    to an output directory.
+
+    Each image undergoes hand detection, cropping, CLAHE enhancement, resizing,
+    and optional data augmentation. Provides progress updates and error logging.
+
+    Args:
+        input_path (str): The directory containing the raw input images.
+        output_path (str): The directory where processed images will be saved.
+                           This directory will be created if it does not exist.
+        output_size (int, optional): The target side length for resized square images. Defaults to 256.
+        augment (bool, optional): If True, applies random data augmentation to images
+                                  before saving. Typically True for training sets only. Defaults to False.
+    """
+    # Ensure the output directory exists
+    os.makedirs(output_path, exist_ok=True)
+
+    print(f"Input directory:  {input_path}")
+    print(f"Output directory: {output_path}")
+    print(f"Output size:      {output_size}x{output_size} pixels")
+    print(f"Augmentation:     {'Disabled' if not augment else 'Enabled'}")
+    print("-" * 30)
+
+    # List all PNG files in the input directory.
+    # Using a set initially for potential future deduplication if needed, though list comprehension is often fine.
+    image_files = {img for img in os.listdir(input_path) if img.lower().endswith('.png')}
+
+    if not image_files:
+        print(f"No PNG images found in {input_path}. Exiting preprocessing for this folder.")
+        # sys.exit(0) # Do not exit the whole script if one folder is empty.
+        return  # Just return from the function
+
+    total_images = len(image_files)
+    processed_count = 0  # Count of images successfully processed and saved
+    success_count = 0  # Count of images where hand detection was successful
+    skipped_count = 0  # Count of images skipped due to read errors or detection failure
+    start_time = time.time()
+
+    # Iterate through each image file with a progress bar.
+    for img_file in tqdm(image_files, desc="Processing Images", unit="img"):
+        input_img_path = os.path.join(input_path, img_file)
+        try:
+            # Read the image as grayscale. cv2.IMREAD_GRAYSCALE ensures 1 channel.
+            img_gray = cv2.imread(str(input_img_path), cv2.IMREAD_GRAYSCALE)
+            if img_gray is None:  # Check if image reading failed (e.g., corrupted file)
+                print(f"Warning: Could not read image {img_file}. Skipping.")
+                skipped_count += 1
+                continue
+
+            # Detect and crop the hand region from the grayscale image.
+            img_cropped = detect_and_crop_hand_cv(img_gray)
+
+            if img_cropped is None:  # Check if hand detection failed for this image
+                print(f"Warning: Hand detection failed for {img_file}. Skipping.")
+                skipped_count += 1
+                continue
+            else:
+                success_count += 1  # Increment count for successful hand detections
+
+            # Apply CLAHE to the cropped image to enhance contrast.
+            img_clahe = apply_clahe(img_cropped)
+
+            # Resize the image to the target output_size, preserving aspect ratio with padding.
+            img_resized = resize(img_clahe, output_size=output_size)
+
+            # Apply data augmentation if `augment` flag is True (typically for training set).
+            img_final = img_resized
+            if augment:
+                img_final = aug(img_resized)
+
+            # Construct the output filename and save the final processed image.
+            output_filename = os.path.join(output_path, img_file)
+            cv2.imwrite(str(output_filename), img_final)
+            processed_count += 1  # Increment count for successfully processed and saved images
+
+        except Exception as e:
+            # Catch any unexpected errors during the processing of a single image.
+            print(f"Error processing {img_file}: {e}. Skipping.")
+            skipped_count += 1
+            continue  # Continue to the next image even if an error occurs
+
+    # --- Summarize processing results ---
+    elapsed_time = time.time() - start_time
+    elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
+    print("\n" + "-" * 30)
+    print("Image preprocessing finished.")
+    print(f"Total images found in input directory: {total_images}")
+    print(f"Successfully processed and saved: {processed_count}")
+    print(
+        f"Hand detection successful: {success_count}")  # Note: success_count refers to hand detection, not file saving.
+    print(f"Images skipped (read/detection error): {skipped_count}")
+    print(f"Total time elapsed: {elapsed_str}")
+    if total_images > 0:
+        # Calculate hand detection success rate based on files attempted to process.
+        detection_rate = (success_count / (processed_count + skipped_count) * 100) if (
+                                                                                                  processed_count + skipped_count) > 0 else 0
+        print(f"Hand Detection Success Rate (of processed/skipped): {detection_rate:.1f}%")
+    print("-" * 30)
+
+import os
+
+import numpy as np
+import tensorflow as tf
+from keras import models  # Keras models module for loading saved models
+from typing import Tuple, List, Optional  # Imports for type hinting
+
+from src.Models.AttentionLayer import SpatialAttention  # Custom attention layer definition
+from src.dataset.RadiographDataset import RadiographDatasetBuilder  # Dataset builder utility
+from src.preprocessing.PreprocessImage import calculate_mean_std  # Utility to calculate mean/std for standardization
+
+def evaluate_saved_model(model_path: str,
+                         test_base_dir: str,
+                         label_test_dataset_path: str,
+                         img_sizes: int = 256) -> Tuple[
+    Optional[List[float]], Optional[np.ndarray], Optional[np.ndarray]]:
+    """
+    Loads a saved Keras model, evaluates it on a test dataset, and collects
+    the true labels and corresponding predictions.
+
+    This function is responsible for ensuring the test data is preprocessed
+    consistently with the training data (e.g., using the same mean and
+    standard deviation for standardization).
+
+    Args:
+        model_path (str): The file path to the saved Keras model
+                          (e.g., '.keras', '.h5', or SavedModel directory).
+        test_base_dir (str): The base directory for the test dataset,
+                             expected to contain a 'prep_images' subfolder
+                             and the label CSV.
+        label_test_dataset_path (str): The filename of the CSV file containing
+                                       ground truth labels for the test set,
+                                       relative to `test_base_dir`.
+        img_sizes (int, optional): The target square dimension (height and width)
+                                   for input images. This must match the size
+                                   used during model training and preprocessing.
+                                   Defaults to 256.
+
+    Returns:
+        Tuple[Optional[List[float]], Optional[np.ndarray], Optional[np.ndarray]]: A tuple containing:
+            - results (Optional[List[float]]): A list of evaluation results (e.g., loss, metrics).
+                                               Returns None if the model cannot be loaded or evaluated.
+            - true_months (Optional[np.ndarray]): A NumPy array of true bone ages in months.
+                                                  Returns None if the model cannot be loaded or evaluated.
+            - pred_months (Optional[np.ndarray]): A NumPy array of predicted bone ages in months.
+                                                  Returns None if the model cannot be loaded or evaluated.
+    """
+    # Calculate mean and standard deviation from the preprocessed test images.
+    # NOTE: It's crucial for consistency that these values (`mean_val`, `std_val`)
+    # are derived from the TRAINING set and passed into this function, rather
+    # than being recalculated on the test set. Recalculating on the test set
+    # can lead to data leakage or inconsistency if the test set's distribution
+    # is different from the training set's.
+    # For a proper setup, `mean_pixel_value` and `std_pixel_value` should be
+    # parameters of this function, derived from the training set.
+    # The current implementation calculates them on 'data/Test/prep_images',
+    # which assumes 'data/Test' is where the test set's prepared images reside.
+    # It also means if this function is called alone, it uses the test set's
+    # statistics, which may not be consistent with training.
+    mean_val, std_val = calculate_mean_std(os.path.join(test_base_dir, 'prep_images'), img_size=(img_sizes, img_sizes))
+
+    # Initialize the RadiographDatasetBuilder for the test set.
+    # It ensures images are loaded and standardized consistently using the calculated mean/std.
+    builder_test = RadiographDatasetBuilder(
+        base_dir=test_base_dir,
+        label_csv=label_test_dataset_path,
+        mean_pixel_value=mean_val,  # Pass the calculated mean value for standardization
+        std_pixel_value=std_val,  # Pass the calculated standard deviation for standardization
+        img_size=(img_sizes, img_sizes),
+        batch_size=1  # Set batch size to 1 for individual predictions during evaluation
+    )
+    # Build the TensorFlow Dataset for testing. `shuffle=False` ensures consistent order.
+    test_dataset = builder_test.build(
+        shuffle=False)  # Do not shuffle the test set.
+
+    print(f"\nLoading model from: {model_path}")
+    try:
+        # Load the Keras model from the specified path.
+        # `custom_objects` is essential for correctly deserializing custom layers
+        # like `SpatialAttention` that are part of your model architecture.
+        loaded_model = models.load_model(model_path, custom_objects={'SpatialAttention': SpatialAttention})
+        print("Model loaded successfully.")
+    except Exception as e:
+        print(f"Error loading the model: {e}")
+        import traceback  # Import traceback for detailed error logging
+        traceback.print_exc()  # Print full stack trace for debugging
+        return None, None, None  # Return None values to indicate failure
+
+    print("\nEvaluating and collecting predictions on the Test Set:")
+
+    true_months: List[float] = []  # List to store true bone ages
+    pred_months: List[float] = []  # List to store predicted bone ages
+
+    # Iterate over the test dataset to collect true labels and generate predictions.
+    # `.unbatch()` is used to process each example individually, which is necessary
+    # for collecting one-to-one predictions.
+    try:
+        for inputs, labels in test_dataset.unbatch():
+            # Add a batch dimension to the input tensor as `model.predict` expects batches.
+            input_batch = tf.expand_dims(inputs, axis=0)
+
+            # Generate prediction for the single input.
+            # `verbose=0` suppresses output during prediction.
+            # `[0][0]` is used to extract the scalar prediction value from the output tensor.
+            prediction = loaded_model.predict(input_batch, verbose=0)[0][0]
+
+            # Append the numpy value of the true label and the scalar prediction.
+            true_months.append(labels.numpy())
+            pred_months.append(prediction)
+    except tf.errors.OutOfRangeError:
+        print("Dataset exhausted (end of iteration).")
+    except Exception as e:
+        print(f"Error during prediction collection on the test set: {e}")
+        import traceback
+        traceback.print_exc()
+        return None, None, None  # Indicate failure
+
+    # Convert lists of true and predicted values to NumPy arrays for further analysis and plotting.
+    true_months_np = np.array(true_months)
+    pred_months_np = np.array(pred_months)
+
+    # Perform a formal evaluation of the model on the entire test dataset.
+    # It's important to build the test_dataset again or ensure its iterator is reset
+    # if it has already been consumed by the `unbatch()` loop, to get a full evaluation.
+    test_dataset_for_eval = builder_test.build(shuffle=False)  # Rebuild to ensure full evaluation
+    results = loaded_model.evaluate(test_dataset_for_eval, verbose=0)
+
+    print("Evaluation Results:")
+    # Print each metric name and its corresponding value from the evaluation results.
+    for name, value in zip(loaded_model.metrics_names, results):
+        print(f"{name}: {value:.4f}")
+
+    return results, true_months_np, pred_months_np
+
+import os
+import numpy as np
+from typing import Tuple  # Import for type hinting
+
+# Assuming these imports are correctly resolved in your project structure
+from src.Models.AttentionLayer import SpatialAttention  # Ensure correct casing/path if different
+from src.plot.PlotEval import plot_eval  # Assuming plot_eval is a function for plotting evaluation results
+from keras import models  # Keras models module for loading saved models
+
+from src.testing.evaluate import evaluate_saved_model
+
+def evaluation_pipeline(model_save_path: str,
+                        test_path: str,
+                        label_path: str,
+                        img_sizes: int,  # Add img_sizes to signature as it's passed to evaluate_saved_model
+                        ):
+    """
+    Orchestrates the evaluation of a trained deep learning model on a test set
+    and generates visual plots of its performance.
+
+    This function loads a previously saved Keras model, evaluates it on the
+    specified test dataset (ensuring consistent data preprocessing), and then
+    visualizes the prediction errors and distributions.
+
+    Args:
+        model_save_path (str): The file path to the saved Keras model (e.g., '.keras', '.h5').
+        test_path (str): The base directory of the test dataset containing images.
+        label_path (str): The file path to the CSV containing ground truth labels for the test set.
+        img_sizes (int): The target square dimension (e.g., 256) of the images used by the model.
+                         This must match the size used during model training and preprocessing.
+
+    Returns:
+        None: This function does not return any value but prints evaluation results
+              and saves plots to disk.
+    """
+    print("\n--- Model Evaluation and Graph Generation ---")
+
+    # Check if the saved model file exists before proceeding.
+    if os.path.exists(model_save_path):
+        # Evaluate the saved model on the test dataset.
+        # It's crucial to pass the mean/std values to ensure the test set is
+        # preprocessed identically to the training set.
+        evaluation_results, true_months_list, pred_months_list = evaluate_saved_model(
+            model_save_path,
+            test_path,
+            label_path,
+            img_sizes=img_sizes,  # Pass img_sizes
+        )
+
+        # Load the model again to access its metrics_names.
+        # This is redundant with the loading inside evaluate_saved_model
+        # but needed here to dynamically get the MAE index if it's not always 1.
+        try:
+            loaded_model_for_metrics = models.load_model(model_save_path,
+                                                         custom_objects={'SpatialAttention': SpatialAttention})
+        except Exception as e:
+            print(f"Error loading model for metrics names: {e}")
+            loaded_model_for_metrics = None
+
+        # Proceed with plotting if evaluation results were successfully obtained.
+        if evaluation_results is not None and loaded_model_for_metrics is not None:
+            # Dynamically find the index of 'mae' in the model's metrics names.
+            # Fallback to index 1 if 'mae' is not explicitly found (assuming loss is at 0, mae at 1).
+            mae_index = loaded_model_for_metrics.metrics_names.index(
+                'mae') if 'mae' in loaded_model_for_metrics.metrics_names else 1
+            mae_months = evaluation_results[mae_index] if mae_index is not None and mae_index < len(
+                evaluation_results) else np.nan
+
+            # Calculate absolute errors for plotting the error distribution.
+            errors_list = np.abs(true_months_list - pred_months_list)
+
+            # Call the external plotting function to visualize the evaluation results.
+            plot_eval(errors_list, mae_months, true_months_list, pred_months_list)
+            print("Evaluation graphs generated and saved as 'age_prediction_analysis.png'.")
+        else:
+            print("\nUnable to evaluate the saved model due to an error during loading or evaluation process.")
+    else:
+        # Inform the user if the model file was not found.
+        print(f"Error: The model was not found at the specified path: {model_save_path}")
+
+import tensorflow as tf
+from keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
+from typing import Optional, Tuple  # Import for type hinting
+
+
+def train_model(model: tf.keras.Model,
+                train_dataset: tf.data.Dataset,
+                epochs: int = 50,
+                validation_dataset: Optional[tf.data.Dataset] = None,
+                model_save_path: str = 'best_age_prediction_model.keras') -> Tuple[tf.keras.Model, tf.keras.callbacks.History]:
+    """
+    Trains the provided Keras model using specified datasets and callbacks.
+
+    This function orchestrates the training process, including saving the best model,
+    implementing early stopping to prevent overfitting, and dynamically adjusting
+    the learning rate during training based on validation performance.
+
+    Args:
+        model (tf.keras.Model): The already compiled Keras model to be trained.
+        train_dataset (tf.data.Dataset): The TensorFlow Dataset for training.
+                                         It should yield (input_data, labels) tuples,
+                                         where input_data matches the model's input
+                                         (e.g., preprocessed images).
+        epochs (int, optional): The maximum number of training epochs. Training
+                                may stop earlier due to EarlyStopping. Defaults to 50.
+        validation_dataset (tf.data.Dataset, optional): The TensorFlow Dataset for validation.
+                                                        Used to monitor performance and guide
+                                                        EarlyStopping and ReduceLROnPlateau.
+                                                        Should have the same structure as `train_dataset`.
+                                                        Defaults to None.
+        model_save_path (str, optional): The file path where the best performing model
+                                         (based on validation MAE) will be saved.
+                                         Defaults to 'best_age_prediction_model.keras'.
+
+    Returns:
+        Tuple[tf.keras.Model, tf.keras.callbacks.History]: A tuple containing:
+            - tf.keras.Model: The trained model instance. Its weights will be restored
+                              to the best observed performance during training if EarlyStopping
+                              with `restore_best_weights=True` is used.
+            - tf.keras.callbacks.History: An object containing the history of loss and
+                                           metric values during training.
+    """
+    print(f"\nStarting model training for {epochs} epochs...")
+
+    # Define Keras Callbacks for enhanced training control and regularization.
+    callbacks = [
+        # ModelCheckpoint: Saves the best model weights observed during training.
+        # It monitors 'val_mae' (Mean Absolute Error on validation set) and saves
+        # only if the monitored metric improves (mode='min' for MAE).
+        ModelCheckpoint(
+            filepath=model_save_path,
+            monitor='val_mae' if validation_dataset else 'mae', # Monitor validation MAE if validation set exists, else training MAE
+            save_best_only=True, # Only save the model when validation MAE improves
+            mode='min', # 'min' mode means lower is better for the monitored metric (MAE)
+            verbose=1 # Display messages when a better model is saved
+        ),
+        # EarlyStopping: Halts training if the monitored metric does not improve
+        # for a specified number of epochs (patience). This prevents overfitting.
+        EarlyStopping(
+            monitor='val_mae' if validation_dataset else 'mae', # Monitor validation MAE
+            patience=10, # Number of epochs with no improvement after which training will be stopped
+            mode='min', # 'min' mode for MAE
+            verbose=1, # Display messages when early stopping is triggered
+            restore_best_weights=True # Restore model weights from the epoch with the best monitored value
+        ),
+        # ReduceLROnPlateau: Dynamically reduces the learning rate when a metric
+        # has stopped improving. This helps the model to converge more finely.
+        ReduceLROnPlateau(
+            monitor='val_mae' if validation_dataset else 'mae', # Monitor validation MAE
+            factor=0.5, # Factor by which the learning rate will be reduced (new_lr = lr * factor)
+            patience=5, # Number of epochs with no improvement after which the learning rate will be reduced
+            min_lr=1e-6, # Lower bound on the learning rate
+            mode='min', # 'min' mode for MAE
+            verbose=1 # Display messages when learning rate is reduced
+        )
+    ]
+
+    # Start the model training process.
+    # The 'initial_epoch=5' parameter means training will start from epoch 5.
+    # This might be useful if resuming training and wanting to skip initial already-converged epochs
+    # or to allow callbacks to become active after a few epochs.
+    # If resuming from a loaded model, Keras automatically handles the initial epoch correctly.
+    # It's important to ensure this parameter aligns with the overall training strategy.
+    history = model.fit(
+        train_dataset,
+        epochs=epochs,
+        validation_data=validation_dataset,
+        callbacks=callbacks,
+        initial_epoch=5 # This parameter means training will resume counting epochs from 5.
+                        # If you are truly restarting a new training, this should be 0.
+                        # If you are loading a pre-trained model and want to continue,
+                        # this might be set based on the last trained epoch.
+    )
+    print("\nModel training completed.")
+    return model, history
+
+# src/pipelines/training_pipeline.py
+
+import tensorflow as tf
+from typing import Optional, Tuple
+
+# Assuming these imports are correctly resolved in your project structure
+from src.Models.AgePredictionModel import AgePredictionModel  # Model architecture definition
+from src.dataset.RadiographDataset import RadiographDatasetBuilder  # Dataset loading and preprocessing
+from src.plot.PlotHistory import plot_training_history  # Utility for plotting training history
+from src.training.RadiographTraining import train_model  # Core model training function
+
+def training_pipeline(base_dir_train: str, label_train: str,
+                      base_dir_val: str, label_val: str,
+                      img_sizes: int = 256,
+                      mean_pixel_value: float = 0.0, std_pixel_value: float = 1.0,
+                      existing_model: Optional[tf.keras.Model] = None,
+                      epochs: int = 50,
+                      model_save_path: str = 'best_age_prediction_model_standalone.keras',
+                      learning_rate: float = 0.0005) -> Optional[tf.keras.Model]:
+    """
+    Orchestrates the entire model training process.
+
+    This pipeline handles the creation and preparation of training and validation datasets,
+    the initialization or loading of the deep learning model, and the execution of the
+    training loop with specified parameters and callbacks. It also plots the training history.
+
+    Args:
+        base_dir_train (str): The base directory for the training dataset, containing images and labels.
+        label_train (str): The filename of the CSV file containing labels for the training set,
+                           relative to `base_dir_train`.
+        base_dir_val (str): The base directory for the validation dataset, containing images and labels.
+        label_val (str): The filename of the CSV file containing labels for the validation set,
+                         relative to `base_dir_val`.
+        img_sizes (int, optional): The target side length for input images (e.g., 256 for 256x256).
+                                   Defaults to 256.
+        mean_pixel_value (float, optional): The mean pixel value calculated from the training set.
+                                            Used for standardizing both training and validation images.
+                                            Defaults to 0.0.
+        std_pixel_value (float, optional): The standard deviation of pixel values from the training set.
+                                           Used for standardizing both training and validation images.
+                                           Defaults to 1.0.
+        existing_model (tf.keras.Model, optional): An already initialized or loaded Keras model.
+                                                   If provided, training continues from this model's state.
+                                                   If None, a new `AgePredictionModel` is created.
+                                                   Defaults to None.
+        epochs (int, optional): The maximum number of epochs for which to train the model.
+                                Actual epochs may be fewer due to early stopping. Defaults to 50.
+        model_save_path (str, optional): The file path where the best performing model
+                                         (based on validation metrics) will be saved during training.
+                                         Defaults to 'best_age_prediction_model_standalone.keras'.
+        learning_rate (float, optional): The initial learning rate for the optimizer if a new model
+                                         is created and compiled. Defaults to 0.0005.
+
+    Returns:
+        Optional[tf.keras.Model]: The trained Keras model instance. Returns None if an error
+                                  occurs during the training process.
+    """
+
+    # --- Dataset Preparation ---
+    # Initialize RadiographDatasetBuilder for the training set.
+    # It will load image paths and labels, and apply specified preprocessing (including standardization).
+    builder_train = RadiographDatasetBuilder(
+        base_dir=base_dir_train,
+        label_csv=label_train,  # Expects label_csv relative to base_dir
+        img_size=(img_sizes, img_sizes),
+        batch_size=16,
+        mean_pixel_value=mean_pixel_value,
+        std_pixel_value=std_pixel_value
+    )
+    # Build the TensorFlow Dataset for training. `train=True` implies shuffling.
+    train_dataset = builder_train.build(shuffle=True)
+
+    # Initialize RadiographDatasetBuilder for the validation set.
+    # It uses the same standardization parameters as the training set for consistency.
+    builder_val = RadiographDatasetBuilder(
+        base_dir=base_dir_val,
+        label_csv=label_val,  # Expects label_csv relative to base_dir
+        img_size=(img_sizes, img_sizes),
+        batch_size=16,
+        mean_pixel_value=mean_pixel_value,
+        std_pixel_value=std_pixel_value
+    )
+    # Build the TensorFlow Dataset for validation. `train=False` implies no shuffling.
+    val_dataset = builder_val.build(shuffle=False)
+
+    # Print the calculated dataset sizes in terms of batches.
+    print(f"\nTrain dataset size (batches): {tf.data.experimental.cardinality(train_dataset).numpy()}")
+    print(f"Validation dataset size (batches): {tf.data.experimental.cardinality(val_dataset).numpy()}")
+
+    # --- Model Initialization or Loading ---
+    model_to_train: tf.keras.Model = None
+    if existing_model is not None:
+        # If an existing model is provided, use it directly.
+        # This allows resuming training or fine-tuning.
+        model_to_train = existing_model
+        print("\nUsing existing model for training.")
+        # Note: If you want to recompile the existing model with new learning_rate or metrics,
+        # you would do it here (e.g., model_to_train.compile(...)).
+        # Keras's load_model usually preserves compilation state, but recompiling can override.
+    else:
+        # If no existing model is provided, create a new AgePredictionModel instance.
+        model_builder = AgePredictionModel(img_size=(img_sizes, img_sizes))
+        # Compile the newly created model with the specified learning rate.
+        model_builder.compile_model(learning_rate=learning_rate)
+        model_to_train = model_builder.model
+        print("\nCreating and compiling a new model for training.")
+
+    # Display the summary of the model (whether new or existing).
+    print("\nModel Summary:")
+    model_to_train.summary()
+
+    # --- Model Training Execution ---
+    print("\nStarting training:")
+    try:
+        # Call the core `train_model` function to execute the training loop.
+        # This function handles epochs, validation, and callbacks (e.g., ModelCheckpoint, EarlyStopping).
+        trained_model, history = train_model(
+            model=model_to_train,  # The model to be trained
+            train_dataset=train_dataset,
+            validation_dataset=val_dataset,
+            epochs=epochs,
+            model_save_path=model_save_path
+        )
+        # Plot the training and validation loss/metrics history.
+        plot_training_history(history, save_path='training_history_plots.png')
+
+        print(f"Training history keys: {history.history.keys()}")
+        print(f"Model trained and saved to '{model_save_path}'.")
+        return trained_model  # Return the trained model instance
+    except Exception as e:
+        # Catch any exceptions during training and print a detailed traceback.
+        print(f"Error during model training: {e}")
+        import traceback
+        traceback.print_exc()  # Print the full stack trace for debugging
+        return None  # Indicate that training failed by returning None
+
+import os
+from keras.models import load_model
+import keras
+from typing import Optional  # Import for Optional type hint
+
+# Assuming correct import path for your custom AttentionLayer
+from src.Models.AttentionLayer import SpatialAttention
+
+def load_trained_model(model_save_path: str) -> Optional[keras.Model]:
+    """
+    Attempts to load a pre-trained Keras model from a specified path.
+
+    This utility function checks for the existence of the model file and
+    handles potential errors during the loading process. It's designed
+    to facilitate resuming training from a checkpoint or using a saved model
+    for evaluation.
+
+    Args:
+        model_save_path (str): The file path to the saved Keras model
+                               (e.g., '.keras', '.h5', or SavedModel directory).
+
+    Returns:
+        Optional[tf.keras.Model]: The loaded Keras model instance if successful.
+                                  Returns None if the model file does not exist
+                                  or if an error occurs during loading.
+    """
+    # Check if the model file exists at the specified path.
+    if os.path.exists(model_save_path):
+        print(f"\nLoading existing model from '{model_save_path}' to continue training...")
+        try:
+            # Load the Keras model.
+            # `custom_objects` is crucial for loading models that use custom layers,
+            # like your SpatialAttention layer.
+            loaded_model = load_model(
+                model_save_path, custom_objects={'SpatialAttention': SpatialAttention}
+            )
+            print("Model loaded successfully.")
+            return loaded_model
+        except Exception as e:
+            # Catch any exceptions that occur during the model loading process.
+            # This can happen if the file is corrupted, the custom object is not found, etc.
+            print(f"Error during model loading: {e}")
+            import traceback
+            traceback.print_exc()  # Print the full stack trace for debugging purposes
+
+            # If loading fails, treat it as if no model was found, and suggest starting anew.
+            print("Model loading failed. Proceeding with training a new model.")
+            return None  # Indicate failure to load by returning None
+    else:
+        # Inform the user if the model file does not exist.
+        print(f"\nModel not found at '{model_save_path}'. Starting training from scratch.")
+        return None  # Indicate that no existing model was found
+
+from src.pipelines.RadiographPipeline import radiograph_pipeline
+
+def main():
+    train_path = 'data/Train/train_labels.csv'
+    test_path = 'data/Test/test_labels.csv'
+    val_path = 'data/Val/val_labels.csv'
+
+    # Workspace preparation
+    # train_labels(train_path)
+    # test_labels(test_path)
+    # val_labels(val_path)
+
+    radiograph_pipeline(preprocess=False, training=False, evaluate=True)
+    # load_structure()
+
+
+if __name__ == '__main__':
+    main()

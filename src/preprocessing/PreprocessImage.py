@@ -252,9 +252,8 @@ def calculate_mean_std(image_folder: str, img_size: Tuple[int, int]) -> Tuple[fl
             # Flatten the 2D image array into a 1D array of pixel values and extend the list.
             pixel_values.extend(img.flatten())
             processed_count += 1
-        except Exception as e:
+        except:
             # Catch any unexpected errors during image processing and log a warning.
-            print(f"Warning: An unexpected error occurred while processing {img_file}: {e}. Skipping.")
             skipped_count += 1
 
     # Convert the list of pixel values to a NumPy array for efficient calculation.
